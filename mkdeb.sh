@@ -17,7 +17,7 @@ cp debian.control debian/DEBIAN/control
 cp igbinary.php.ini debian/etc/php5/conf.d/igbinary.ini
 cp modules/igbinary.so debian/${php_ext_dir}
 
-dpkg -b debian igbinary-$(uname -m).deb
+dpkg -b debian igbinary-$(dpkg --print-architecture).deb
 
 rm -rf debian
 
