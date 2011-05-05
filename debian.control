@@ -1,0 +1,6 @@
+Package: igbinary
+Version: 0.1
+Maintainer: Adam Durana <adam@nine.net>
+Architecture: all
+Recommends: php5
+Description: igbinary serializer extension for PHP5.
