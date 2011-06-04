@@ -220,9 +220,26 @@ zend_function_entry igbinary_functions[] = {
 	{NULL, NULL, NULL}
 };
 /* }}} */
+
+/* {{{ igbinary dependencies */
+#if ZEND_MODULE_API_NO >= 20050922
+static const zend_module_dep igbinary_module_deps[] = {
+	ZEND_MOD_REQUIRED("standard")
+	ZEND_MOD_REQUIRED("session")
+#ifdef HAVE_APC_SUPPORT
+	ZEND_MOD_OPTIONAL("apc")
+#endif
+	{NULL, NULL, NULL}
+};
+#endif
+/* }}} */
+
 /* {{{ igbinary_module_entry */
 zend_module_entry igbinary_module_entry = {
-#if ZEND_MODULE_API_NO >= 20010901
+#if ZEND_MODULE_API_NO >= 20050922
+	STANDARD_MODULE_HEADER_EX, NULL,
+	igbinary_module_deps,
+#elif ZEND_MODULE_API_NO >= 20010901
 	STANDARD_MODULE_HEADER,
 #endif
 	"igbinary",
