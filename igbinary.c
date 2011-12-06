@@ -444,7 +444,7 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	}
 
 	if (igbinary_serialize_header(&igsd TSRMLS_CC) != 0) {
-		zend_error(E_WARNING, "igbinary_serailize: cannot write header");
+		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
 		igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
 		return FAILURE;
 	}
@@ -605,7 +605,7 @@ inline static int igbinary_serialize_header(struct igbinary_serialize_data *igsd
 }
 /* }}} */
 /* {{{ igbinary_serialize_resize */
-/** Expandes igbinary_serialize_data. */
+/** Expands igbinary_serialize_data. */
 inline static int igbinary_serialize_resize(struct igbinary_serialize_data *igsd, size_t size TSRMLS_DC) {
 	if (igsd->buffer_size + size < igsd->buffer_capacity) {
 		return 0;
