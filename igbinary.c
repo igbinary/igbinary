@@ -162,7 +162,7 @@ static inline void igbinary_mm_wrapper_free(void *ptr, void *context);
 /* }}} */
 /* {{{ Serializing functions prototypes */
 inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar, struct igbinary_memory_manager *memory_manager TSRMLS_DC);
-inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd TSRMLS_DC);
+inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd, int free_buffer TSRMLS_DC);
 
 inline static int igbinary_serialize_header(struct igbinary_serialize_data *igsd TSRMLS_DC);
 
@@ -371,20 +371,26 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 
 	if (igbinary_serialize_header(&igsd TSRMLS_CC) != 0) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
-		igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
+		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return 1;
 	}
 
 	if (igbinary_serialize_zval(&igsd, z TSRMLS_CC) != 0) {
-		igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
+		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return 1;
 	}
 
 	/* Explicit nul termination */
-	*ret_len = igsd.buffer_size;
+	if (igbinary_serialize8(&igsd, 0 TSRMLS_CC) != 0) {
+		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
+		return 1;
+	}
+
+	/* Set return values */
+	*ret_len = igsd.buffer_size - 1;
 	*ret = igsd.buffer;
 
-	igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
+	igbinary_serialize_data_deinit(&igsd, 0 TSRMLS_CC);
 
 	return 0;
 }
@@ -470,12 +476,12 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 
 	if (igbinary_serialize_header(&igsd TSRMLS_CC) != 0) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
-		igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
+		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return FAILURE;
 	}
 
 	if (igbinary_serialize_array(&igsd, PS(http_session_vars), false, false TSRMLS_CC) != 0) {
-		igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
+		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return FAILURE;
 	}
 
@@ -489,7 +495,7 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 		*newlen = igsd.buffer_size;
 	}
 
-	igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
+	igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 
 	return SUCCESS;
 }
@@ -621,8 +627,8 @@ inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *i
 /* }}} */
 /* {{{ igbinary_serialize_data_deinit */
 /** Deinits igbinary_serialize_data. */
-inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd TSRMLS_DC) {
-	if (igsd->buffer) {
+inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd, int free_buffer TSRMLS_DC) {
+	if (free_buffer && igsd->buffer) {
 		igsd->mm.free(igsd->buffer, igsd->mm.context);
 	}
 
