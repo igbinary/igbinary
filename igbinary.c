@@ -123,6 +123,7 @@ struct igbinary_serialize_data {
 	struct hash_si objects;		/**< Hash of already serialized objects. */
 	int string_count;			/**< Serialized string count, used for back referencing */
 	int error;					/**< Error number. Not used. */
+	struct igbinary_memory_manager	mm; /**< Memory management functions. */
 };
 
 /** String/len pair for the igbinary_unserializer_data.
@@ -154,8 +155,13 @@ struct igbinary_unserialize_data {
 	smart_str string0_buf;			/**< Temporary buffer for strings */
 };
 /* }}} */
+/* {{{ Memory allocator wrapper prototypes */
+static inline void *igbinary_mm_wrapper_malloc(size_t size, void *context);
+static inline void *igbinary_mm_wrapper_realloc(void *ptr, size_t size, void *context);
+static inline void igbinary_mm_wrapper_free(void *ptr, void *context);
+/* }}} */
 /* {{{ Serializing functions prototypes */
-inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar TSRMLS_DC);
+inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar, struct igbinary_memory_manager *memory_manager TSRMLS_DC);
 inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd TSRMLS_DC);
 
 inline static int igbinary_serialize_header(struct igbinary_serialize_data *igsd TSRMLS_DC);
@@ -333,11 +339,32 @@ PHP_MINFO_FUNCTION(igbinary) {
 	DISPLAY_INI_ENTRIES();
 }
 /* }}} */
+/* {{{ Memory allocator wrappers */
+static inline void *igbinary_mm_wrapper_malloc(size_t size, void *context)
+{
+    return emalloc(size);
+}
+
+static inline void *igbinary_mm_wrapper_realloc(void *ptr, size_t size, void *context)
+{
+    return erealloc(ptr, size);
+}
+
+static inline void igbinary_mm_wrapper_free(void *ptr, void *context)
+{
+    return efree(ptr);
+}
+/* }}} */
 /* {{{ int igbinary_serialize(uint8_t**, size_t*, zval*) */
 IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z TSRMLS_DC) {
+	return igbinary_serialize_ex(ret, ret_len, z, NULL TSRMLS_CC);
+}
+/* }}} */
+/* {{{ int igbinary_serialize_ex(uint8_t**, size_t*, zval*, igbinary_memory_manager*) */
+IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, struct igbinary_memory_manager *memory_manager TSRMLS_DC) {
 	struct igbinary_serialize_data igsd;
 
-	if (igbinary_serialize_data_init(&igsd, Z_TYPE_P(z) != IS_OBJECT && Z_TYPE_P(z) != IS_ARRAY TSRMLS_CC)) {
+	if (igbinary_serialize_data_init(&igsd, Z_TYPE_P(z) != IS_OBJECT && Z_TYPE_P(z) != IS_ARRAY, memory_manager TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
 		return 1;
 	}
@@ -355,9 +382,7 @@ IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z TSRM
 
 	/* Explicit nul termination */
 	*ret_len = igsd.buffer_size;
-	*ret = (uint8_t *) emalloc(igsd.buffer_size + 1);
-	memcpy(*ret, igsd.buffer, igsd.buffer_size);
-	*(*ret + igsd.buffer_size) = 0;
+	*ret = igsd.buffer;
 
 	igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
 
@@ -438,13 +463,13 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	struct igbinary_serialize_data igsd;
 	char *s;
 
-	if (igbinary_serialize_data_init(&igsd, false TSRMLS_CC)) {
+	if (igbinary_serialize_data_init(&igsd, false, NULL TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
 		return FAILURE;
 	}
 
 	if (igbinary_serialize_header(&igsd TSRMLS_CC) != 0) {
-		zend_error(E_WARNING, "igbinary_serailize: cannot write header");
+		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
 		igbinary_serialize_data_deinit(&igsd TSRMLS_CC);
 		return FAILURE;
 	}
@@ -560,8 +585,17 @@ static int APC_UNSERIALIZER_NAME(igbinary) ( APC_UNSERIALIZER_ARGS ) {
 
 /* {{{ igbinary_serialize_data_init */
 /** Inits igbinary_serialize_data. */
-inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar TSRMLS_DC) {
+inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar, struct igbinary_memory_manager *memory_manager TSRMLS_DC) {
 	int r = 0;
+
+	if (memory_manager == NULL) {
+		igsd->mm.alloc = igbinary_mm_wrapper_malloc;
+		igsd->mm.realloc = igbinary_mm_wrapper_realloc;
+		igsd->mm.free = igbinary_mm_wrapper_free;
+		igsd->mm.context = NULL;
+	} else {
+		igsd->mm = *memory_manager;
+	}
 
 	igsd->buffer = NULL;
 	igsd->buffer_size = 0;
@@ -569,7 +603,7 @@ inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *i
 	igsd->string_count = 0;
 	igsd->error = 0;
 
-	igsd->buffer = (uint8_t *) emalloc(igsd->buffer_capacity);
+	igsd->buffer = (uint8_t *) igsd->mm.alloc(igsd->buffer_capacity, igsd->mm.context);
 	if (igsd->buffer == NULL) {
 		return 1;
 	}
@@ -589,7 +623,7 @@ inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *i
 /** Deinits igbinary_serialize_data. */
 inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd TSRMLS_DC) {
 	if (igsd->buffer) {
-		efree(igsd->buffer);
+		igsd->mm.free(igsd->buffer, igsd->mm.context);
 	}
 
 	if (!igsd->scalar) {
@@ -605,7 +639,7 @@ inline static int igbinary_serialize_header(struct igbinary_serialize_data *igsd
 }
 /* }}} */
 /* {{{ igbinary_serialize_resize */
-/** Expandes igbinary_serialize_data. */
+/** Expands igbinary_serialize_data. */
 inline static int igbinary_serialize_resize(struct igbinary_serialize_data *igsd, size_t size TSRMLS_DC) {
 	if (igsd->buffer_size + size < igsd->buffer_capacity) {
 		return 0;
@@ -615,7 +649,7 @@ inline static int igbinary_serialize_resize(struct igbinary_serialize_data *igsd
 		igsd->buffer_capacity *= 2;
 	}
 
-	igsd->buffer = (uint8_t *) erealloc(igsd->buffer, igsd->buffer_capacity);
+	igsd->buffer = (uint8_t *) igsd->mm.realloc(igsd->buffer, igsd->buffer_capacity, igsd->mm.context);
 	if (igsd->buffer == NULL)
 		return 1;
 
