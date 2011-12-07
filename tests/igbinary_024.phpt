@@ -3,6 +3,7 @@ Recursive objects
 --SKIPIF--
 --INI--
 error_reporting = E_NONE
+igbinary.compact_strings=1
 --FILE--
 <?php 
 if(!extension_loaded('igbinary')) {

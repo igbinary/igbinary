@@ -1,6 +1,8 @@
 --TEST--
 Serialize object into session, full set
 --SKIPIF--
+--INI--
+igbinary.compact_strings=1
 --FILE--
 <?php 
 
