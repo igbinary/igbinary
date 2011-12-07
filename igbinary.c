@@ -1318,12 +1318,7 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 	igsd->error = 0;
 	igsd->references = NULL;
 	igsd->references_count = 0;
-	igsd->references_capacity = 4;
-
-	igsd->references = (void **) emalloc(sizeof(void *) * igsd->references_capacity);
-	if (igsd->references == NULL) {
-		return 1;
-	}
+	igsd->references_capacity = 0;
 
 	igsd->strings = (struct igbinary_unserialize_string_pair *) emalloc(sizeof(struct igbinary_unserialize_string_pair) * igsd->strings_capacity);
 	if (igsd->strings == NULL) {
@@ -1662,6 +1657,11 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		ALLOC_HASHTABLE(Z_ARRVAL_PP(z));
 		zend_hash_init(Z_ARRVAL_PP(z), n + 1, NULL, ZVAL_PTR_DTOR, 0);
 
+		if (!igsd->references_capacity) {
+			igsd->references_capacity = 4;
+			igsd->references = (void **) emalloc(sizeof(void *) * igsd->references_capacity);
+		}
+
 		/* references */
 		if (igsd->references_count + 1 >= igsd->references_capacity) {
 			while (igsd->references_count + 1 >= igsd->references_capacity) {
@@ -1918,6 +1918,11 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 
 	object_init_ex(*z, ce);
 
+	if (!igsd->references_capacity) {
+		igsd->references_capacity = 4;
+		igsd->references = (void **) emalloc(sizeof(void *) * igsd->references_capacity);
+	}
+
 	/* reference */
 	if (igsd->references_count + 1 >= igsd->references_capacity) {
 		while (igsd->references_count + 1 >= igsd->references_capacity) {
@@ -2053,6 +2058,11 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 				case IS_DOUBLE:
 				case IS_BOOL:
 					/* reference */
+					if (!igsd->references_capacity) {
+						igsd->references_capacity = 4;
+						igsd->references = (void **) emalloc(sizeof(void *) * igsd->references_capacity);
+					}
+
 					if (igsd->references_count + 1 >= igsd->references_capacity) {
 						while (igsd->references_count + 1 >= igsd->references_capacity) {
 							igsd->references_capacity *= 2;
