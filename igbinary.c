@@ -272,13 +272,13 @@ ZEND_GET_MODULE(igbinary)
 
 /* {{{ INI entries */
 PHP_INI_BEGIN()
-	STD_PHP_INI_BOOLEAN("igbinary.compact_strings", "1", PHP_INI_ALL, OnUpdateBool, compact_strings, zend_igbinary_globals, igbinary_globals)
+	STD_PHP_INI_BOOLEAN("igbinary.compact_strings", "0", PHP_INI_ALL, OnUpdateBool, compact_strings, zend_igbinary_globals, igbinary_globals)
 PHP_INI_END()
 /* }}} */
 
 /* {{{ php_igbinary_init_globals */
 static void php_igbinary_init_globals(zend_igbinary_globals *igbinary_globals) {
-	igbinary_globals->compact_strings = 1;
+	igbinary_globals->compact_strings = 0;
 }
 /* }}} */
 
