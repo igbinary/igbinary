@@ -8,7 +8,7 @@ if (PHP_IGBINARY == "yes") {
   if (res) {
     AC_DEFINE('HAVE_APC_SUPPORT', 1, 'Whether to enable apc support')
   }
-  EXTENSION("igbinary", "igbinary.c hash_si.c hash_function.c");
+  EXTENSION("igbinary", "igbinary.c hash_si.c");
   AC_DEFINE('HAVE_IGBINARY', 1, 'Have igbinary support', false);
   ADD_EXTENSION_DEP('igbinary', 'session');
 }

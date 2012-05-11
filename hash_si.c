@@ -18,7 +18,7 @@
 #include <assert.h>
 
 #include "hash.h"
-#include "hash_function.h"
+#include "zend.h"
 
 /* {{{ nextpow2 */
 /** Next power of 2.
@@ -80,7 +80,7 @@ inline static size_t _hash_si_find(struct hash_si *h, const char *key, size_t ke
 	assert(h != NULL);
 	
 	size = h->size;
-	hv = hash_function(key, key_len, 0) & (h->size-1);
+	hv = zend_inline_hash_func(key, key_len) & (h->size-1);
 	
 	while (size > 0 &&
 		h->data[hv].key != NULL &&
@@ -116,7 +116,7 @@ int hash_si_remove(struct hash_si *h, const char *key, size_t key_len, uint32_t 
 
 	j = (hv + 1) & (h->size-1);	
 	while (h->data[j].key != NULL) {
-		k = hash_function(h->data[j].key, strlen(h->data[j].key), 0) & (h->size-1);
+		k = zend_inline_hash_func(h->data[j].key, strlen(h->data[j].key)) & (h->size-1);
 		if ((j > hv && (k <= hv || k > j)) || (j < hv && (k <= hv && k > j))) {
 			h->data[hv].key = h->data[j].key;
 			h->data[hv].key_len = h->data[j].key_len;
