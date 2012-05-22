@@ -1,9 +1,10 @@
 --TEST--
 Check for serialization handler, ini-directive
 --SKIPIF--
+<?php if (!extension_loaded("session")) exit("skip. session extension not loaded"); ?>
 --INI--
 --FILE--
-<?php 
+<?php
 if(!extension_loaded('igbinary')) {
 	dl('igbinary.' . PHP_SHLIB_SUFFIX);
 }

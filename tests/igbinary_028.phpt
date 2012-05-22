@@ -1,8 +1,9 @@
 --TEST--
 Serialize object into session, full set
 --SKIPIF--
+<?php if (!extension_loaded("session")) exit("skip. session extension not loaded"); ?>
 --FILE--
-<?php 
+<?php
 
 class Foo {
 	private static $s1 = array();

@@ -1,8 +1,9 @@
 --TEST--
 Check for serialization handler
 --SKIPIF--
+<?php if (!extension_loaded("session")) exit("skip. session extension not loaded"); ?>
 --FILE--
-<?php 
+<?php
 if(!extension_loaded('igbinary')) {
 	dl('igbinary.' . PHP_SHLIB_SUFFIX);
 }
