@@ -1,10 +1,10 @@
 /*
   +----------------------------------------------------------------------+
   | See COPYING file for further copyright information                   |
-  +----------------------------------------------------------------------+ 
+  +----------------------------------------------------------------------+
   | Author: Oleg Grenrus <oleg.grenrus@dynamoid.com>                     |
   | See CREDITS for contributors                                         |
-  +----------------------------------------------------------------------+ 
+  +----------------------------------------------------------------------+
 */
 
 #ifdef HAVE_CONFIG_H
@@ -19,10 +19,14 @@
 #include "php_ini.h"
 #include "zend_dynamic_array.h"
 #include "zend_alloc.h"
+
 #include "ext/standard/info.h"
-#include "ext/session/php_session.h"
+#include "ext/standard/php_var.h"
+#ifdef HAVE_PHP_SESSION
+# include "ext/session/php_session.h"
+#endif
 #include "ext/standard/php_incomplete_class.h"
-#ifdef HAVE_APC_SUPPORT 
+#ifdef HAVE_APC_SUPPORT
 # if USE_BUNDLED_APC
 #  include "apc_serializer.h"
 # else
@@ -225,7 +229,9 @@ zend_function_entry igbinary_functions[] = {
 #if ZEND_MODULE_API_NO >= 20050922
 static const zend_module_dep igbinary_module_deps[] = {
 	ZEND_MOD_REQUIRED("standard")
+#ifdef HAVE_PHP_SESSION
 	ZEND_MOD_REQUIRED("session")
+#endif
 #ifdef HAVE_APC_SUPPORT
 	ZEND_MOD_OPTIONAL("apc")
 #endif
@@ -432,6 +438,8 @@ PHP_FUNCTION(igbinary_serialize) {
 	RETVAL_STRINGL((char *)string, string_len, 0);
 }
 /* }}} */
+
+#ifdef HAVE_PHP_SESSION
 /* {{{ Serializer encode function */
 PS_SERIALIZER_ENCODE_FUNC(igbinary)
 {
@@ -530,6 +538,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 	return SUCCESS;
 }
 /* }}} */
+#endif
 
 #ifdef HAVE_APC_SUPPORT
 /* {{{ apc_serialize function */
@@ -1776,7 +1785,7 @@ inline static int igbinary_unserialize_object_ser(struct igbinary_unserialize_da
 	}
 
 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
-	ret = ce->unserialize(z, ce, 
+	ret = ce->unserialize(z, ce,
 		(const unsigned char*)(igsd->buffer + igsd->buffer_offset), n,
 		(zend_unserialize_data *)&var_hash TSRMLS_CC);
 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
