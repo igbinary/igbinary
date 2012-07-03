@@ -32,6 +32,16 @@
 
 #define IGBINARY_VERSION "1.1.2-dev"
 
+/** Struct that contains pointers to memory allocation and deallocation functions.
+ * @see igbinary_serialize_data
+ */
+struct igbinary_memory_manager {
+	void *(*alloc)(size_t size, void *context);
+	void *(*realloc)(void *ptr, size_t new_size, void *context);
+	void (*free)(void *ptr, void *context);
+	void *context;
+};
+
 /** Serialize zval.
  * Return buffer is allocated by this function with emalloc.
  * @param[out] ret Return buffer
@@ -40,6 +50,16 @@
  * @return 0 on success, 1 elsewhere.
  */
 IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z TSRMLS_DC);
+
+/** Serialize zval.
+ * Return buffer is allocated by this function with emalloc.
+ * @param[out] ret Return buffer
+ * @param[out] ret_len Size of return buffer
+ * @param[in] z Variable to be serialized
+ * @param[in] memory_manager Pointer to the structure that contains memory allocation functions.
+ * @return 0 on success, 1 elsewhere.
+ */
+IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, struct igbinary_memory_manager *memory_manager TSRMLS_DC);
 
 /** Unserialize to zval.
  * @param[in] buf Buffer with serialized data.
