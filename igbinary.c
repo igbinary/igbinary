@@ -1,10 +1,10 @@
 /*
   +----------------------------------------------------------------------+
   | See COPYING file for further copyright information                   |
-  +----------------------------------------------------------------------+ 
+  +----------------------------------------------------------------------+
   | Author: Oleg Grenrus <oleg.grenrus@dynamoid.com>                     |
   | See CREDITS for contributors                                         |
-  +----------------------------------------------------------------------+ 
+  +----------------------------------------------------------------------+
 */
 
 #ifdef HAVE_CONFIG_H
@@ -20,9 +20,15 @@
 #include "zend_dynamic_array.h"
 #include "zend_alloc.h"
 #include "ext/standard/info.h"
-#include "ext/session/php_session.h"
+#include "ext/standard/php_var.h"
+
+#if HAVE_PHP_SESSION
+# include "ext/session/php_session.h"
+#endif /* HAVE_PHP_SESSION */
+
 #include "ext/standard/php_incomplete_class.h"
-#ifdef HAVE_APC_SUPPORT 
+
+#ifdef HAVE_APC_SUPPORT
 # if USE_BUNDLED_APC
 #  include "apc_serializer.h"
 # else
@@ -45,8 +51,10 @@
 #include <stddef.h>
 #include "hash.h"
 
+#if HAVE_PHP_SESSION
 /** Session serializer function prototypes. */
 PS_SERIALIZER_FUNCS(igbinary);
+#endif /* HAVE_PHP_SESSION */
 
 #ifdef HAVE_APC_SUPPORT
 /** Apc serializer function prototypes */
@@ -231,7 +239,9 @@ zend_function_entry igbinary_functions[] = {
 #if ZEND_MODULE_API_NO >= 20050922
 static const zend_module_dep igbinary_module_deps[] = {
 	ZEND_MOD_REQUIRED("standard")
+#ifdef HAVE_PHP_SESSION
 	ZEND_MOD_REQUIRED("session")
+#endif
 #ifdef HAVE_APC_SUPPORT
 	ZEND_MOD_OPTIONAL("apc")
 #endif
@@ -334,6 +344,11 @@ PHP_MINFO_FUNCTION(igbinary) {
 #else
 	php_info_print_table_row(2, "igbinary APC serializer ABI", "no");
 #endif
+#if HAVE_PHP_SESSION
+	php_info_print_table_row(2, "igbinary session support", "yes");
+#else
+	php_info_print_table_row(2, "igbinary session support", "no");
+#endif
 	php_info_print_table_end();
 
 	DISPLAY_INI_ENTRIES();
@@ -363,6 +378,7 @@ IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z TSRM
 /* {{{ int igbinary_serialize_ex(uint8_t**, size_t*, zval*, igbinary_memory_manager*) */
 IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, struct igbinary_memory_manager *memory_manager TSRMLS_DC) {
 	struct igbinary_serialize_data igsd;
+	uint8_t *tmpbuf;
 
 	if (igbinary_serialize_data_init(&igsd, Z_TYPE_P(z) != IS_OBJECT && Z_TYPE_P(z) != IS_ARRAY, memory_manager TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
@@ -384,6 +400,12 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 	if (igbinary_serialize8(&igsd, 0 TSRMLS_CC) != 0) {
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return 1;
+	}
+
+	/* shrink buffer to the real length, ignore errors */
+	tmpbuf = (uint8_t *) igsd.mm.realloc(igsd.buffer, igsd.buffer_size, igsd.mm.context);
+	if (tmpbuf != NULL) {
+		igsd.buffer = tmpbuf;
 	}
 
 	/* Set return values */
@@ -463,11 +485,12 @@ PHP_FUNCTION(igbinary_serialize) {
 	RETVAL_STRINGL((char *)string, string_len, 0);
 }
 /* }}} */
+#ifdef HAVE_PHP_SESSION
 /* {{{ Serializer encode function */
 PS_SERIALIZER_ENCODE_FUNC(igbinary)
 {
 	struct igbinary_serialize_data igsd;
-	char *s;
+	uint8_t *tmpbuf;
 
 	if (igbinary_serialize_data_init(&igsd, false, NULL TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
@@ -485,17 +508,23 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 		return FAILURE;
 	}
 
-	s = estrndup((char*)igsd.buffer, igsd.buffer_size);
-	if (s == NULL) {
+	if (igbinary_serialize8(&igsd, 0 TSRMLS_CC) != 0) {
+		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return FAILURE;
 	}
 
-	*newstr = s;
-	if (newlen) {
-		*newlen = igsd.buffer_size;
+	/* shrink buffer to the real length, ignore errors */
+	tmpbuf = (uint8_t *)igsd.mm.realloc(igsd.buffer, igsd.buffer_size, igsd.mm.context);
+	if (tmpbuf != NULL) {
+		igsd.buffer = tmpbuf;
 	}
 
-	igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
+	*newstr = (char *)igsd.buffer;
+	if (newlen) {
+		*newlen = igsd.buffer_size - 1;
+	}
+
+	igbinary_serialize_data_deinit(&igsd, 0 TSRMLS_CC);
 
 	return SUCCESS;
 }
@@ -561,6 +590,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 	return SUCCESS;
 }
 /* }}} */
+#endif /* HAVE_PHP_SESSION */
 
 #ifdef HAVE_APC_SUPPORT
 /* {{{ apc_serialize function */
@@ -741,11 +771,20 @@ inline static int igbinary_serialize_long(struct igbinary_serialize_data *igsd, 
 	/* -LONG_MIN is 0 otherwise. */
 	if (l == LONG_MIN) {
 #if SIZEOF_LONG == 8
-		igbinary_serialize8(igsd, (uint8_t) igbinary_type_long64n TSRMLS_CC);
-		igbinary_serialize64(igsd, (uint64_t) 0x8000000000000000 TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_long64n TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize64(igsd, (uint64_t) 0x8000000000000000 TSRMLS_CC) != 0) {
+			return 1;
+		}
 #elif SIZEOF_LONG == 4
-		igbinary_serialize8(igsd, (uint8_t) igbinary_type_long32n TSRMLS_CC);
-		igbinary_serialize32(igsd, (uint32_t) 0x80000000 TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_long32n TSRMLS_CC) != 0) {
+			return 1;
+		}
+		if (igbinary_serialize32(igsd, (uint32_t) 0x80000000 TSRMLS_CC) != 0) {
+			return 1;
+		}
 #else
 #error "Strange sizeof(long)."
 #endif
@@ -753,23 +792,46 @@ inline static int igbinary_serialize_long(struct igbinary_serialize_data *igsd, 
 	}
 
 	if (k <= 0xff) {
-		igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long8p : igbinary_type_long8n) TSRMLS_CC);
-		igbinary_serialize8(igsd, (uint8_t) k TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long8p : igbinary_type_long8n) TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize8(igsd, (uint8_t) k TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else if (k <= 0xffff) {
-		igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long16p : igbinary_type_long16n) TSRMLS_CC);
-		igbinary_serialize16(igsd, (uint16_t) k TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long16p : igbinary_type_long16n) TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize16(igsd, (uint16_t) k TSRMLS_CC) != 0) {
+			return 1;
+		}
 #if SIZEOF_LONG == 8
 	} else if (k <= 0xffffffff) {
-		igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long32p : igbinary_type_long32n) TSRMLS_CC);
-		igbinary_serialize32(igsd, (uint32_t) k TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long32p : igbinary_type_long32n) TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize32(igsd, (uint32_t) k TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else {
-		igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long64p : igbinary_type_long64n) TSRMLS_CC);
-		igbinary_serialize64(igsd, (uint64_t) k TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long64p : igbinary_type_long64n) TSRMLS_CC) != 0) {
+			return 1;
+		}
+		if (igbinary_serialize64(igsd, (uint64_t) k TSRMLS_CC) != 0) {
+			return 1;
+		}
 	}
 #elif SIZEOF_LONG == 4
 	} else {
-		igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long32p : igbinary_type_long32n) TSRMLS_CC);
-		igbinary_serialize32(igsd, (uint32_t) k TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) (p ? igbinary_type_long32p : igbinary_type_long32n) TSRMLS_CC) != 0) {
+			return 1;
+		}
+		if (igbinary_serialize32(igsd, (uint32_t) k TSRMLS_CC) != 0) {
+			return 1;
+		}
 	}
 #else
 #error "Strange sizeof(long)."
@@ -786,13 +848,13 @@ inline static int igbinary_serialize_double(struct igbinary_serialize_data *igsd
 		uint64_t u;
 	} u;
 
-	igbinary_serialize8(igsd, igbinary_type_double TSRMLS_CC);
+	if (igbinary_serialize8(igsd, igbinary_type_double TSRMLS_CC) != 0) {
+		return 1;
+	}
 
 	u.d = d;
 
-	igbinary_serialize64(igsd, u.u TSRMLS_CC);
-
-	return 0;
+	return igbinary_serialize64(igsd, u.u TSRMLS_CC);
 }
 /* }}} */
 /* {{{ igbinary_serialize_string */
@@ -804,7 +866,10 @@ inline static int igbinary_serialize_string(struct igbinary_serialize_data *igsd
 	uint32_t *i = &t;
 
 	if (len == 0) {
-		igbinary_serialize8(igsd, igbinary_type_string_empty TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_string_empty TSRMLS_CC) != 0) {
+			return 1;
+		}
+
 		return 0;
 	}
 
@@ -820,14 +885,29 @@ inline static int igbinary_serialize_string(struct igbinary_serialize_data *igsd
 		}
 	} else {
 		if (*i <= 0xff) {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id8 TSRMLS_CC);
-			igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id8 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else if (*i <= 0xffff) {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id16 TSRMLS_CC);
-			igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id16 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id32 TSRMLS_CC);
-			igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id32 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		}
 	}
 
@@ -838,14 +918,29 @@ inline static int igbinary_serialize_string(struct igbinary_serialize_data *igsd
 /** Serializes string data. */
 inline static int igbinary_serialize_chararray(struct igbinary_serialize_data *igsd, const char *s, size_t len TSRMLS_DC) {
 	if (len <= 0xff) {
-		igbinary_serialize8(igsd, igbinary_type_string8 TSRMLS_CC);
-		igbinary_serialize8(igsd, len TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_string8 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize8(igsd, len TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else if (len <= 0xffff) {
-		igbinary_serialize8(igsd, igbinary_type_string16 TSRMLS_CC);
-		igbinary_serialize16(igsd, len TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_string16 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize16(igsd, len TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else {
-		igbinary_serialize8(igsd, igbinary_type_string32 TSRMLS_CC);
-		igbinary_serialize32(igsd, len TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_string32 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize32(igsd, len TSRMLS_CC) != 0) {
+			return 1;
+		}
 	}
 
 	if (igbinary_serialize_resize(igsd, len TSRMLS_CC)) {
@@ -887,14 +982,29 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	}
 
 	if (n <= 0xff) {
-		igbinary_serialize8(igsd, igbinary_type_array8 TSRMLS_CC);
-		igbinary_serialize8(igsd, n TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_array8 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize8(igsd, n TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else if (n <= 0xffff) {
-		igbinary_serialize8(igsd, igbinary_type_array16 TSRMLS_CC);
-		igbinary_serialize16(igsd, n TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_array16 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize16(igsd, n TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else {
-		igbinary_serialize8(igsd, igbinary_type_array32 TSRMLS_CC);
-		igbinary_serialize32(igsd, n TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_array32 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize32(igsd, n TSRMLS_CC) != 0) {
+			return 1;
+		}
 	}
 
 	if (n == 0) {
@@ -918,12 +1028,17 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 
 		switch (key_type) {
 			case HASH_KEY_IS_LONG:
-				igbinary_serialize_long(igsd, key_index TSRMLS_CC);
+				if (igbinary_serialize_long(igsd, key_index TSRMLS_CC) != 0) {
+					return 1;
+				}
 				break;
-			case HASH_KEY_IS_STRING:
 
-				igbinary_serialize_string(igsd, key, key_len-1 TSRMLS_CC);
+			case HASH_KEY_IS_STRING:
+				if (igbinary_serialize_string(igsd, key, key_len-1 TSRMLS_CC) != 0) {
+					return 1;
+				}
 				break;
+
 			default:
 				zend_error(E_ERROR, "igbinary_serialize_array: key is not string nor array");
 				/* not reached */
@@ -941,7 +1056,6 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 				return 1;
 			}
 		}
-
 	}
 
 	return 0;
@@ -975,16 +1089,31 @@ inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *i
 		enum igbinary_type type;
 		if (*i <= 0xff) {
 			type = object ? igbinary_type_objref8 : igbinary_type_ref8;
-			igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC);
-			igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else if (*i <= 0xffff) {
 			type = object ? igbinary_type_objref16 : igbinary_type_ref16;
-			igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC);
-			igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else {
 			type = object ? igbinary_type_objref32 : igbinary_type_ref32;
-			igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC);
-			igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		}
 
 		return 0;
@@ -1013,14 +1142,29 @@ inline static int igbinary_serialize_array_sleep(struct igbinary_serialize_data 
 
 	/* Serialize array id. */
 	if (n <= 0xff) {
-		igbinary_serialize8(igsd, igbinary_type_array8 TSRMLS_CC);
-		igbinary_serialize8(igsd, n TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_array8 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize8(igsd, n TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else if (n <= 0xffff) {
-		igbinary_serialize8(igsd, igbinary_type_array16 TSRMLS_CC);
-		igbinary_serialize16(igsd, n TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_array16 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize16(igsd, n TSRMLS_CC) != 0) {
+			return 1;
+		}
 	} else {
-		igbinary_serialize8(igsd, igbinary_type_array32 TSRMLS_CC);
-		igbinary_serialize32(igsd, n TSRMLS_CC);
+		if (igbinary_serialize8(igsd, igbinary_type_array32 TSRMLS_CC) != 0) {
+			return 1;
+		}
+
+		if (igbinary_serialize32(igsd, n TSRMLS_CC) != 0) {
+			return 1;
+		}
 	}
 
 	if (n == 0) {
@@ -1050,12 +1194,19 @@ inline static int igbinary_serialize_array_sleep(struct igbinary_serialize_data 
 			/* we should still add element even if it's not OK,
 			 * since we already wrote the length of the array before
 			 * serialize null as key-value pair */
-			igbinary_serialize_null(igsd TSRMLS_CC);
+			if (igbinary_serialize_null(igsd TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else {
 
 			if (zend_hash_find(Z_OBJPROP_P(z), Z_STRVAL_PP(d), Z_STRLEN_PP(d) + 1, (void *) &v) == SUCCESS) {
-				igbinary_serialize_string(igsd, Z_STRVAL_PP(d), Z_STRLEN_PP(d) TSRMLS_CC);
-				igbinary_serialize_zval(igsd, *v TSRMLS_CC);
+				if (igbinary_serialize_string(igsd, Z_STRVAL_PP(d), Z_STRLEN_PP(d) TSRMLS_CC) != 0) {
+					return 1;
+				}
+
+				if (igbinary_serialize_zval(igsd, *v TSRMLS_CC) != 0) {
+					return 1;
+				}
 			} else if (ce) {
 				char *prot_name = NULL;
 				char *priv_name = NULL;
@@ -1066,9 +1217,15 @@ inline static int igbinary_serialize_array_sleep(struct igbinary_serialize_data 
 					zend_mangle_property_name(&priv_name, &prop_name_length, ce->name, ce->name_length,
 								Z_STRVAL_PP(d), Z_STRLEN_PP(d), ce->type & ZEND_INTERNAL_CLASS);
 					if (zend_hash_find(Z_OBJPROP_P(z), priv_name, prop_name_length+1, (void *) &v) == SUCCESS) {
-						igbinary_serialize_string(igsd, priv_name, prop_name_length TSRMLS_CC);
+						if (igbinary_serialize_string(igsd, priv_name, prop_name_length TSRMLS_CC) != 0) {
+							efree(priv_name);
+							return 1;
+						}
+
 						efree(priv_name);
-						igbinary_serialize_zval(igsd, *v TSRMLS_CC);
+						if (igbinary_serialize_zval(igsd, *v TSRMLS_CC) != 0) {
+							return 1;
+						}
 						break;
 					}
 					efree(priv_name);
@@ -1077,23 +1234,39 @@ inline static int igbinary_serialize_array_sleep(struct igbinary_serialize_data 
 					zend_mangle_property_name(&prot_name, &prop_name_length, "*", 1,
 								Z_STRVAL_PP(d), Z_STRLEN_PP(d), ce->type & ZEND_INTERNAL_CLASS);
 					if (zend_hash_find(Z_OBJPROP_P(z), prot_name, prop_name_length+1, (void *) &v) == SUCCESS) {
-						igbinary_serialize_string(igsd, prot_name, prop_name_length TSRMLS_CC);
+						if (igbinary_serialize_string(igsd, prot_name, prop_name_length TSRMLS_CC) != 0) {
+							efree(prot_name);
+							return 1;
+						}
+
 						efree(prot_name);
-						igbinary_serialize_zval(igsd, *v TSRMLS_CC);
+						if (igbinary_serialize_zval(igsd, *v TSRMLS_CC) != 0) {
+							return 1;
+						}
 						break;
 					}
 					efree(prot_name);
 
 					/* no win */
-					igbinary_serialize_string(igsd, Z_STRVAL_PP(d), Z_STRLEN_PP(d) TSRMLS_CC);
-					igbinary_serialize_null(igsd TSRMLS_CC);
 					php_error_docref(NULL TSRMLS_CC, E_NOTICE, "\"%s\" returned as member variable from __sleep() but does not exist", Z_STRVAL_PP(d));
+					if (igbinary_serialize_string(igsd, Z_STRVAL_PP(d), Z_STRLEN_PP(d) TSRMLS_CC) != 0) {
+						return 1;
+					}
+
+					if (igbinary_serialize_null(igsd TSRMLS_CC) != 0) {
+						return 1;
+					}
 				} while (0);
 
 			} else {
 				// if all else fails, just serialize the value in anyway.
-				igbinary_serialize_string(igsd, Z_STRVAL_PP(d), Z_STRLEN_PP(d) TSRMLS_CC);
-				igbinary_serialize_zval(igsd, *v TSRMLS_CC);
+				if (igbinary_serialize_string(igsd, Z_STRVAL_PP(d), Z_STRLEN_PP(d) TSRMLS_CC) != 0) {
+					return 1;
+				}
+
+				if (igbinary_serialize_zval(igsd, *v TSRMLS_CC) != 0) {
+					return 1;
+				}
 			}
 		}
 	}
@@ -1112,14 +1285,29 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 		igsd->string_count += 1;
 
 		if (name_len <= 0xff) {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_object8 TSRMLS_CC);
-			igbinary_serialize8(igsd, (uint8_t) name_len TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object8 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize8(igsd, (uint8_t) name_len TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else if (name_len <= 0xffff) {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_object16 TSRMLS_CC);
-			igbinary_serialize16(igsd, (uint16_t) name_len TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object16 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize16(igsd, (uint16_t) name_len TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_object32 TSRMLS_CC);
-			igbinary_serialize32(igsd, (uint32_t) name_len TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object32 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize32(igsd, (uint32_t) name_len TSRMLS_CC) != 0) {
+				return 1;
+			}
 		}
 
 		if (igbinary_serialize_resize(igsd, name_len TSRMLS_CC)) {
@@ -1131,14 +1319,29 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 	} else {
 		/* already serialized string */
 		if (*i <= 0xff) {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id8 TSRMLS_CC);
-			igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id8 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else if (*i <= 0xffff) {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id16 TSRMLS_CC);
-			igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id16 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		} else {
-			igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id32 TSRMLS_CC);
-			igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC);
+			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id32 TSRMLS_CC) != 0) {
+				return 1;
+			}
+
+			if (igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC) != 0) {
+				return 1;
+			}
 		}
 	}
 
@@ -1170,27 +1373,65 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 
 	/* custom serializer */
 	if (ce && ce->serialize != NULL) {
-		if(ce->serialize(z, &serialized_data, &serialized_len, (zend_serialize_data *)NULL TSRMLS_CC) == SUCCESS && !EG(exception)) {
-			igbinary_serialize_object_name(igsd, ce->name, ce->name_length TSRMLS_CC);
+		if (ce->serialize(z, &serialized_data, &serialized_len, (zend_serialize_data *)NULL TSRMLS_CC) == SUCCESS && !EG(exception)) {
+			if (igbinary_serialize_object_name(igsd, ce->name, ce->name_length TSRMLS_CC) != 0) {
+				if (serialized_data) {
+					efree(serialized_data);
+				}
+				return 1;
+			}
+
 
 			if (serialized_len <= 0xff) {
-				igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_ser8 TSRMLS_CC);
-				igbinary_serialize8(igsd, (uint8_t) serialized_len TSRMLS_CC);
+				if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_ser8 TSRMLS_CC) != 0) {
+					if (serialized_data) {
+						efree(serialized_data);
+					}
+					return 1;
+				}
+
+				if (igbinary_serialize8(igsd, (uint8_t) serialized_len TSRMLS_CC) != 0) {
+					if (serialized_data) {
+						efree(serialized_data);
+					}
+					return 1;
+				}
 			} else if (serialized_len <= 0xffff) {
-				igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_ser16 TSRMLS_CC);
-				igbinary_serialize16(igsd, (uint16_t) serialized_len TSRMLS_CC);
+				if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_ser16 TSRMLS_CC) != 0) {
+					if (serialized_data) {
+						efree(serialized_data);
+					}
+					return 1;
+				}
+
+				if (igbinary_serialize16(igsd, (uint16_t) serialized_len TSRMLS_CC) != 0) {
+					if (serialized_data) {
+						efree(serialized_data);
+					}
+					return 1;
+				}
 			} else {
-				igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_ser32 TSRMLS_CC);
-				igbinary_serialize32(igsd, (uint32_t) serialized_len TSRMLS_CC);
+				if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_ser32 TSRMLS_CC) != 0) {
+					if (serialized_data) {
+						efree(serialized_data);
+					}
+					return 1;
+				}
+
+				if (igbinary_serialize32(igsd, (uint32_t) serialized_len TSRMLS_CC) != 0) {
+					if (serialized_data) {
+						efree(serialized_data);
+					}
+					return 1;
+				}
 			}
 
 			if (igbinary_serialize_resize(igsd, serialized_len TSRMLS_CC)) {
 				if (serialized_data) {
 					efree(serialized_data);
 				}
-				r = 1;
 
-				return r;
+				return 1;
 			}
 
 			memcpy(igsd->buffer+igsd->buffer_size, serialized_data, serialized_len);
@@ -1200,7 +1441,7 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 			r = 1;
 		} else {
 			/* Serialization callback failed, assume null output */
-			igbinary_serialize_null(igsd TSRMLS_CC);
+			r = igbinary_serialize_null(igsd TSRMLS_CC);
 		}
 
 		if (serialized_data) {
@@ -1212,7 +1453,10 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 
 	/* serialize class name */
 	PHP_SET_CLASS_ATTRIBUTES(z);
-	igbinary_serialize_object_name(igsd, class_name, name_len TSRMLS_CC);
+	if (igbinary_serialize_object_name(igsd, class_name, name_len TSRMLS_CC) != 0) {
+		PHP_CLEANUP_CLASS_ATTRIBUTES();
+		return 1;
+	}
 	PHP_CLEANUP_CLASS_ATTRIBUTES();
 
 	if (ce && ce != PHP_IC_ENTRY && zend_hash_exists(&ce->function_table, "__sleep", sizeof("__sleep"))) {
@@ -1235,8 +1479,10 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 							"serialize");
 
 					/* empty array */
-					igbinary_serialize8(igsd, igbinary_type_array8 TSRMLS_CC);
-					r = igbinary_serialize8(igsd, 0 TSRMLS_CC);
+					r = igbinary_serialize8(igsd, igbinary_type_array8 TSRMLS_CC);
+					if (r == 0) {
+						r = igbinary_serialize8(igsd, 0 TSRMLS_CC);
+					}
 				}
 			}
 		} else {
@@ -1258,7 +1504,10 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 /** Serialize zval. */
 static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z TSRMLS_DC) {
 	if (Z_ISREF_P(z)) {
-		igbinary_serialize8(igsd, (uint8_t) igbinary_type_ref TSRMLS_CC);
+		if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_ref TSRMLS_CC) != 0) {
+			return 1;
+		}
+
 		/* Complex types serialize a reference, scalars do not... */
 		/* FIXME: Absolutely wrong level to check this. */
 		switch (Z_TYPE_P(z)) {
@@ -1816,7 +2065,7 @@ inline static int igbinary_unserialize_object_ser(struct igbinary_unserialize_da
 	}
 
 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
-	ret = ce->unserialize(z, ce, 
+	ret = ce->unserialize(z, ce,
 		(const unsigned char*)(igsd->buffer + igsd->buffer_offset), n,
 		(zend_unserialize_data *)&var_hash TSRMLS_CC);
 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);

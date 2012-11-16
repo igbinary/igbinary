@@ -82,7 +82,7 @@ $o3 = new Obj3(0, 1, 4);
 test('objectrecarr', $o3, false);
 
 $o4 = new Obj4(100);
-$o4->set(&$o4);
+$o4->set($o4);
 test('objectselfrec', $o4, true);
 
 /*

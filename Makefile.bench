@@ -1,0 +1,10 @@
+benchmark: all
+	-@if test ! -z "$(PHP_EXECUTABLE)" && test -x "$(PHP_EXECUTABLE)"; then \
+		cd benchmark; \
+		BENCH_PHP_EXECUTABLE="$(PHP_EXECUTABLE)" \
+			BENCH_PHP_ARGS="-n -d extension_dir=$(top_builddir)/modules/ $(PHP_TEST_SHARED_EXTENSIONS)" \
+			$(PHP_EXECUTABLE) -n ./run-bench.php; \
+	else \
+		echo "ERROR: Cannot run tests without CLI sapi."; \
+	fi
+

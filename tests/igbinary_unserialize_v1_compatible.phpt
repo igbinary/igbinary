@@ -62,6 +62,7 @@ $data = array(
 	),
 	array(
 		'var' => 'O:8:"stdClass":4:{i:0;i:1;i:1;i:2;i:2;i:3;i:3;i:4;}',
+		'var_e' => (object)array(1, 2, 3, 4),
 		'type' => 'object',
 		'description' => 'object',
 		'data' => 'AAAAARcIc3RkQ2xhc3MUBAYABgEGAQYCBgIGAwYDBgQ=',
@@ -78,7 +79,11 @@ $data = array(
 
 $all_passed = true;
 foreach ($data as $item) {
-	$var = unserialize($item['var']);
+	if (isset($item['var_e'])) {
+		$var = $item['var_e'];
+	} else {
+		$var = unserialize($item['var']);
+	}
 	$unserialized = igbinary_unserialize(base64_decode($item['data']));
 
 	ob_start();

@@ -2,9 +2,6 @@
 Igbinary module info
 --SKIPIF--
 <?php if (!extension_loaded("igbinary")) print "skip"; 
-if (!extension_loaded('apc')) {
-	echo "skip APC not loaded";
-}
 
 ?>
 --FILE--
@@ -23,4 +20,5 @@ igbinary
 igbinary support => enabled
 igbinary version => %s
 igbinary APC serializer ABI => %s
+igbinary session support => %s
 igbinary.compact_strings => %s => %s

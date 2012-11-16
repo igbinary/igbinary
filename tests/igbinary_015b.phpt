@@ -1,13 +1,24 @@
 --TEST--
 Check for serialization handler, ini-directive
 --SKIPIF--
+<?php
+if (!extension_loaded('session')) {
+	exit('skip session extension not loaded');
+}
+
+ob_start(); 
+phpinfo(INFO_MODULES);
+$str = ob_get_clean();
+ 
+$array = explode("\n", $str); 
+$array = preg_grep('/^igbinary session support.*yes/', $array); 
+if (!$array) {
+	exit('skip igbinary session handler not available');
+}
+
 --INI--
 --FILE--
 <?php 
-if(!extension_loaded('igbinary')) {
-	dl('igbinary.' . PHP_SHLIB_SUFFIX);
-}
-
 ini_set('session.serialize_handler', 'igbinary');
 
 $output = '';

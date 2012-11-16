@@ -17,7 +17,6 @@ if (version_compare(PHP_VERSION, "5.2.16", "<")) {
 
 $a = array("foo" => &$b);
 $b = array(1, 2, $a);
-var_dump($a);
 
 /* all three statements below should produce same output however PHP stock
  * unserialize/serialize produces different output (5.2.16). I consider this is
@@ -27,46 +26,28 @@ var_dump($a);
 //$k = $a;
 //$k = unserialize(serialize($a));
 $k = igbinary_unserialize(igbinary_serialize($a));
-var_dump($k);
 
-$k["foo"][1] = "b";
-var_dump($k);
+function check($a, $k) {
+	$a_str = print_r($a, true);
+	$k_str = print_r($k, true);
+
+	if ($a_str !== $k_str) {
+		echo "Output differs\n";
+		echo "Expected:\n", $a_str, "\n";
+		echo "Actual:\n", $k_str, "\n";
+	} else {
+		echo "OK\n";
+	}
+}
+
+check($a, $k);
+
+$a["foo"][2]["foo"][1] = "b";
+$k["foo"][2]["foo"][1] = "b";
+
+check($a, $k);
 
 ?>
 --EXPECT--
-array(1) {
-  ["foo"]=>
-  &array(3) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(2)
-    [2]=>
-    *RECURSION*
-  }
-}
-array(1) {
-  ["foo"]=>
-  &array(3) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(2)
-    [2]=>
-    *RECURSION*
-  }
-}
-array(1) {
-  ["foo"]=>
-  &array(3) {
-    [0]=>
-    int(1)
-    [1]=>
-    string(1) "b"
-    [2]=>
-    array(1) {
-      ["foo"]=>
-      *RECURSION*
-    }
-  }
-}
+OK
+OK
