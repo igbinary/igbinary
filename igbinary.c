@@ -47,6 +47,9 @@
 # include <stdint.h>
 #endif
 
+#if HAVE_ZLIB
+# include <zlib.h>
+#endif
 
 #include <stddef.h>
 #include "hash.h"
@@ -127,6 +130,11 @@ struct igbinary_serialize_data {
 	size_t buffer_capacity;		/**< Buffer capacity. */
 	bool scalar;				/**< Serializing scalar. */
 	bool compact_strings;		/**< Check for duplicate strings. */
+#if HAVE_ZLIB
+	bool compression;			/**< Zlib compression */
+	int compression_min_size;	/**< Minimum size to use zlib compression */
+	int compression_level;		/**< Zlib compression level */
+#endif
 	struct hash_si strings;		/**< Hash of already serialized strings. */
 	struct hash_si objects;		/**< Hash of already serialized objects. */
 	int string_count;			/**< Serialized string count, used for back referencing */
@@ -150,6 +158,7 @@ struct igbinary_unserialize_data {
 	uint8_t *buffer;				/**< Buffer. */
 	size_t buffer_size;				/**< Buffer size. */
 	size_t buffer_offset;			/**< Current read offset. */
+	bool free_buffer;				/**< Free buffer */
 
 	struct igbinary_unserialize_string_pair *strings; /**< Unserialized strings. */
 	size_t strings_count;			/**< Unserialized string count. */
@@ -283,12 +292,22 @@ ZEND_GET_MODULE(igbinary)
 /* {{{ INI entries */
 PHP_INI_BEGIN()
 	STD_PHP_INI_BOOLEAN("igbinary.compact_strings", "1", PHP_INI_ALL, OnUpdateBool, compact_strings, zend_igbinary_globals, igbinary_globals)
+#if HAVE_ZLIB
+	STD_PHP_INI_BOOLEAN("igbinary.compression", "0", PHP_INI_ALL, OnUpdateBool, compression, zend_igbinary_globals, igbinary_globals)
+	STD_PHP_INI_ENTRY("igbinary.compression_min_size", "128", PHP_INI_ALL, OnUpdateLong, compression_min_size, zend_igbinary_globals, igbinary_globals)
+	STD_PHP_INI_ENTRY("igbinary.compression_level", "-1", PHP_INI_ALL, OnUpdateLong, compression_level, zend_igbinary_globals, igbinary_globals)
+#endif
 PHP_INI_END()
 /* }}} */
 
 /* {{{ php_igbinary_init_globals */
 static void php_igbinary_init_globals(zend_igbinary_globals *igbinary_globals) {
 	igbinary_globals->compact_strings = 1;
+#if HAVE_ZLIB
+	igbinary_globals->compression = 0;
+	igbinary_globals->compression_min_size = 128;
+	igbinary_globals->compression_level = -1;
+#endif
 }
 /* }}} */
 
@@ -379,6 +398,11 @@ IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z TSRM
 IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, struct igbinary_memory_manager *memory_manager TSRMLS_DC) {
 	struct igbinary_serialize_data igsd;
 	uint8_t *tmpbuf;
+#if HAVE_ZLIB
+	char *in;
+	size_t in_size;
+	size_t out_size;
+#endif
 
 	if (igbinary_serialize_data_init(&igsd, Z_TYPE_P(z) != IS_OBJECT && Z_TYPE_P(z) != IS_ARRAY, memory_manager TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
@@ -401,6 +425,42 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 		return 1;
 	}
+
+#if HAVE_ZLIB
+	if (igsd.compression && igsd.buffer_size > igsd.compression_min_size) {
+		in = igsd.buffer;
+		in_size = igsd.buffer_size - 1;
+
+		igsd.buffer_capacity = compressBound(in_size) + 8;
+		igsd.buffer_size = 0;
+
+		igsd.buffer = (uint8_t *) igsd.mm.alloc(igsd.buffer_capacity, igsd.mm.context);
+		if (igsd.buffer == NULL) {
+			return 1;
+		}
+
+		igbinary_serialize32(&igsd, IGBINARY_FORMAT_VERSION_ZLIB TSRMLS_CC);
+		igbinary_serialize32(&igsd, in_size TSRMLS_CC);
+
+		out_size = igsd.buffer_capacity - 8;
+
+		if (compress2(igsd.buffer+8, &out_size, in, in_size, igsd.compression_level) != Z_OK) {
+			igsd.mm.free(in, igsd.mm.context);
+			igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
+			return 1;
+		}
+
+		igsd.buffer_size = 8 + out_size + 1;
+
+		if (igsd.buffer_size >= in_size) {
+			igsd.mm.free(igsd.buffer, igsd.mm.context);
+
+			igsd.buffer = in;
+			igsd.buffer_size = in_size + 1;
+			igsd.buffer_capacity = igsd.buffer_size;
+		}
+	}
+#endif
 
 	/* shrink buffer to the real length, ignore errors */
 	tmpbuf = (uint8_t *) igsd.mm.realloc(igsd.buffer, igsd.buffer_size, igsd.mm.context);
@@ -651,6 +711,11 @@ inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *i
 	}
 
 	igsd->compact_strings = (bool)IGBINARY_G(compact_strings);
+#if HAVE_ZLIB
+	igsd->compression = (bool)IGBINARY_G(compression);
+	igsd->compression_min_size = IGBINARY_G(compression_min_size);
+	igsd->compression_level = IGBINARY_G(compression_level);
+#endif
 
 	return r;
 }
@@ -1558,6 +1623,7 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 	igsd->buffer = NULL;
 	igsd->buffer_size = 0;
 	igsd->buffer_offset = 0;
+	igsd->free_buffer = 0;
 
 	igsd->strings = NULL;
 	igsd->strings_count = 0;
@@ -1586,6 +1652,10 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 /* {{{ igbinary_unserialize_data_deinit */
 /** Deinits igbinary_unserialize_data_init. */
 inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_data *igsd TSRMLS_DC) {
+	if (igsd->free_buffer && igsd->buffer) {
+		efree(igsd->buffer);
+	}
+	
 	if (igsd->strings) {
 		efree(igsd->strings);
 	}
@@ -1603,6 +1673,10 @@ inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_
 /** Unserialize header. Check for version. */
 inline static int igbinary_unserialize_header(struct igbinary_unserialize_data *igsd TSRMLS_DC) {
 	uint32_t version;
+#if HAVE_ZLIB
+	size_t size;
+	char *out;
+#endif
 
 	if (igsd->buffer_offset + 4 >= igsd->buffer_size) {
 		return 1;
@@ -1610,11 +1684,46 @@ inline static int igbinary_unserialize_header(struct igbinary_unserialize_data *
 
 	version = igbinary_unserialize32(igsd TSRMLS_CC);
 
+#if HAVE_ZLIB
+	if (version == IGBINARY_FORMAT_VERSION_ZLIB) {
+
+		if (igsd->buffer_offset + 4 >= igsd->buffer_size) {
+			return 1;
+		}
+
+		size = igbinary_unserialize32(igsd TSRMLS_CC);
+		out = emalloc(size);
+		if (out == NULL) {
+			return 1;
+		}
+		if (uncompress(out, &size, (igsd->buffer + igsd->buffer_offset), igsd->buffer_size - igsd->buffer_offset) != Z_OK) {
+			efree(out);
+			return 1;
+		}
+
+		igsd->buffer = out;
+		igsd->buffer_size = size;
+		igsd->buffer_offset = 0;
+		igsd->free_buffer = 1;
+
+		if (igsd->buffer_offset + 4 >= igsd->buffer_size) {
+			return 1;
+		}
+		version = igbinary_unserialize32(igsd TSRMLS_CC);
+	}
+#else
+	if (version == IGBINARY_FORMAT_VERSION_ZLIB) {
+		zend_error(E_WARNING, "igbinary_unserialize_header: data compressed with zlib, but zlib support not enabled");
+		return 1;
+	}
+#endif
+
 	/* Support older version 1 and the current format 2 */
 	if (version == IGBINARY_FORMAT_VERSION || version == 0x00000001) {
 		return 0;
 	} else {
-		zend_error(E_WARNING, "igbinary_unserialize_header: unsupported version: %u, should be %u or %u", (unsigned int) version, 0x00000001, (unsigned int) IGBINARY_FORMAT_VERSION);
+		zend_error(E_WARNING, "igbinary_unserialize_header: unsupported version: %u, should be %u or %u or %u", 
+			(unsigned int) version, 0x00000001, (unsigned int) IGBINARY_FORMAT_VERSION, (unsigned int) IGBINARY_FORMAT_VERSION_ZLIB);
 		return 1;
 	}
 }

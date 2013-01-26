@@ -14,6 +14,11 @@ dnl Otherwise use enable:
 
 PHP_ARG_ENABLE(igbinary, whether to enable igbinary support,
 	[  --enable-igbinary          Enable igbinary support])
+	
+if test -z "$PHP_ZLIB_DIR"; then
+  PHP_ARG_WITH(zlib-dir, for the location of libz,
+  [  --with-zlib-dir[=DIR]     igbinary: Set the path to libz install prefix], no, no)
+fi
 
 if test "$PHP_IGBINARY" != "no"; then
   AC_CHECK_HEADERS([stdbool.h],, AC_MSG_ERROR([stdbool.h not exists]))
@@ -51,4 +56,5 @@ if test "$PHP_IGBINARY" != "no"; then
   PHP_INSTALL_HEADERS([ext/igbinary], [igbinary.h])
   PHP_NEW_EXTENSION(igbinary, igbinary.c hash_si.c, $ext_shared,, $PHP_IGBINARY_CFLAGS)
   PHP_ADD_EXTENSION_DEP(igbinary, session, true)
+  PHP_ADD_EXTENSION_DEP(igbinary, zlib, true)
 fi

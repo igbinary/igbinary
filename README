@@ -67,8 +67,20 @@ Add the following lines to your php.ini:
   session.serialize_handler=igbinary
 
   # Enable or disable compacting of duplicate strings
-  # The default is On.
+  # Default is On
   igbinary.compact_strings=On
+  
+  # Compress serialized data using zlib
+  # Default is Off
+  igbinary.compression=Off
+
+  # Minimum size of serialized data to compress
+  # Default is 128 bytes
+  igbinary.compression_min_size=128
+
+  # Compression level between 0 (no compression) and 9 (most compression)
+  # Default is -1, which lets the server decide
+  igbinary.compression_level=-1
 
   # Use igbinary as serializer in APC cache (3.1.7 or later)
   ;apc.serializer=igbinary
