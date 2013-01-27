@@ -22,6 +22,9 @@ extern zend_module_entry igbinary_module_entry;
 
 ZEND_BEGIN_MODULE_GLOBALS(igbinary)
 	zend_bool compact_strings;
+	zend_bool compression;
+	long compression_min_size;
+	long compression_level;
 ZEND_END_MODULE_GLOBALS(igbinary)
 
 #ifdef ZTS
@@ -63,6 +66,8 @@ PHP_FUNCTION(igbinary_unserialize);
 
 /** Binary protocol version of igbinary. */
 #define IGBINARY_FORMAT_VERSION 0x00000002
+
+#define IGBINARY_FORMAT_VERSION_ZLIB 0x00000003
 
 /** Backport macros from php 5.3 */
 #ifndef Z_ISREF_P
