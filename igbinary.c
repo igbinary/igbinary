@@ -28,6 +28,9 @@
 
 #include "ext/standard/php_incomplete_class.h"
 
+#ifdef HAVE_APCU_SUPPORT
+# include "ext/apcu/apc_api.h"
+#else
 #ifdef HAVE_APC_SUPPORT
 # if USE_BUNDLED_APC
 #  include "apc_serializer.h"
@@ -35,6 +38,7 @@
 #  include "ext/apc/apc_serializer.h"
 # endif
 #endif /* HAVE_APC_SUPPORT */
+#endif /* HAVE_APCU_SUPPORT */
 #include "php_igbinary.h"
 
 #include "igbinary.h"
@@ -242,8 +246,12 @@ static const zend_module_dep igbinary_module_deps[] = {
 #ifdef HAVE_PHP_SESSION
 	ZEND_MOD_REQUIRED("session")
 #endif
+#ifdef HAVE_APCU_SUPPORT
+	ZEND_MOD_REQUIRED("apcu")
+#else
 #ifdef HAVE_APC_SUPPORT
 	ZEND_MOD_OPTIONAL("apc")
+#endif
 #endif
 	{NULL, NULL, NULL}
 };
@@ -339,10 +347,14 @@ PHP_MINFO_FUNCTION(igbinary) {
 	php_info_print_table_start();
 	php_info_print_table_row(2, "igbinary support", "enabled");
 	php_info_print_table_row(2, "igbinary version", IGBINARY_VERSION);
+#ifdef HAVE_APCU_SUPPORT
+	php_info_print_table_row(2, "igbinary APCU serializer ABI", "yes");
+#else
 #ifdef HAVE_APC_SUPPORT
 	php_info_print_table_row(2, "igbinary APC serializer ABI", APC_SERIALIZER_ABI);
 #else
 	php_info_print_table_row(2, "igbinary APC serializer ABI", "no");
+#endif
 #endif
 #if HAVE_PHP_SESSION
 	php_info_print_table_row(2, "igbinary session support", "yes");
