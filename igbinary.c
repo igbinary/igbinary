@@ -28,6 +28,10 @@
 
 #include "ext/standard/php_incomplete_class.h"
 
+#ifdef HAVE_APCU_SUPPORT
+# include "ext/apcu/apc_serializer.h"
+#endif /* HAVE_APCU_SUPPORT */
+
 #ifdef HAVE_APC_SUPPORT
 # if USE_BUNDLED_APC
 #  include "apc_serializer.h"
@@ -35,6 +39,7 @@
 #  include "ext/apc/apc_serializer.h"
 # endif
 #endif /* HAVE_APC_SUPPORT */
+
 #include "php_igbinary.h"
 
 #include "igbinary.h"
@@ -56,7 +61,7 @@
 PS_SERIALIZER_FUNCS(igbinary);
 #endif /* HAVE_PHP_SESSION */
 
-#ifdef HAVE_APC_SUPPORT
+#if defined(HAVE_APC_SUPPORT) || defined(HAVE_APCU_SUPPORT)
 /** Apc serializer function prototypes */
 static int APC_SERIALIZER_NAME(igbinary) (APC_SERIALIZER_ARGS);
 static int APC_UNSERIALIZER_NAME(igbinary) (APC_UNSERIALIZER_ARGS);
@@ -242,6 +247,9 @@ static const zend_module_dep igbinary_module_deps[] = {
 #ifdef HAVE_PHP_SESSION
 	ZEND_MOD_REQUIRED("session")
 #endif
+#ifdef HAVE_APCU_SUPPORT
+	ZEND_MOD_OPTIONAL("apcu")
+#endif
 #ifdef HAVE_APC_SUPPORT
 	ZEND_MOD_OPTIONAL("apc")
 #endif
@@ -304,7 +312,7 @@ PHP_MINIT_FUNCTION(igbinary) {
 		PS_SERIALIZER_DECODE_NAME(igbinary));
 #endif
 
-#ifdef HAVE_APC_SUPPORT
+#if defined(HAVE_APC_SUPPORT) || defined(HAVE_APCU_SUPPORT)
 	apc_register_serializer("igbinary",
 		APC_SERIALIZER_NAME(igbinary),
 		APC_UNSERIALIZER_NAME(igbinary),
@@ -339,10 +347,14 @@ PHP_MINFO_FUNCTION(igbinary) {
 	php_info_print_table_start();
 	php_info_print_table_row(2, "igbinary support", "enabled");
 	php_info_print_table_row(2, "igbinary version", IGBINARY_VERSION);
+#ifdef HAVE_APCU_SUPPORT
+	php_info_print_table_row(2, "igbinary APCU serializer ABI", APC_SERIALIZER_ABI);
+#else
 #ifdef HAVE_APC_SUPPORT
 	php_info_print_table_row(2, "igbinary APC serializer ABI", APC_SERIALIZER_ABI);
 #else
 	php_info_print_table_row(2, "igbinary APC serializer ABI", "no");
+#endif
 #endif
 #if HAVE_PHP_SESSION
 	php_info_print_table_row(2, "igbinary session support", "yes");
@@ -592,7 +604,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 /* }}} */
 #endif /* HAVE_PHP_SESSION */
 
-#ifdef HAVE_APC_SUPPORT
+#if defined(HAVE_APC_SUPPORT) || defined(HAVE_APCU_SUPPORT)
 /* {{{ apc_serialize function */
 static int APC_SERIALIZER_NAME(igbinary) ( APC_SERIALIZER_ARGS ) {
 	(void)config;

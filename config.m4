@@ -20,10 +20,14 @@ if test "$PHP_IGBINARY" != "no"; then
   AC_CHECK_HEADERS([stddef.h],, AC_MSG_ERROR([stddef.h not exists]))
   AC_CHECK_HEADERS([stdint.h],, AC_MSG_ERROR([stdint.h not exists]))
 
-  AC_MSG_CHECKING([for apc includes])
-  if test -f "$phpincludedir/ext/apc/apc_serializer.h"; then
-    apc_inc_path="$phpincludedir"
-	AC_MSG_RESULT([$apc_inc_path])
+  AC_MSG_CHECKING([for APC/APCU includes])
+  if test -f "$phpincludedir/ext/apcu/apc_serializer.h"; then
+	apc_inc_path="$phpincludedir"
+	AC_MSG_RESULT([APCU in $apc_inc_path])
+	AC_DEFINE(HAVE_APCU_SUPPORT,1,[Whether to enable apcu support])
+  elif test -f "$phpincludedir/ext/apc/apc_serializer.h"; then
+	apc_inc_path="$phpincludedir"
+	AC_MSG_RESULT([APC in $apc_inc_path])
 	AC_DEFINE(HAVE_APC_SUPPORT,1,[Whether to enable apc support])
   elif test -f "${srcdir}/apc_serializer.h"; then
   	AC_MSG_RESULT([apc_serializer.h bundled])
