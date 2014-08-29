@@ -3,7 +3,7 @@ Check for serialization handler, SessionHandlerInterface
 --SKIPIF--
 <?php
 // http://php.net/manual/en/class.sessionhandlerinterface.php (PHP 5 >= 5.4.0)
-if (version_compare(phpversion(), "6.4.0", "<")) {
+if (version_compare(phpversion(), "5.4.0", "<")) {
     exit("skip php version less than 5.4.x");
 }
 
