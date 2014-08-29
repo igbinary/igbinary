@@ -12,7 +12,6 @@ if (version_compare($ext->getVersion(), '4.0.2', '<')) {
 }
 
 --INI--
-extension=apcu.so
 apc.enable_cli=1
 apc.serializer=igbinary
 --FILE--

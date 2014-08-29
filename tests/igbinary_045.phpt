@@ -12,7 +12,6 @@ if (version_compare($ext->getVersion(), '3.1.7', '<')) {
 }
 
 --INI--
-extension=apc.so
 apc.enable_cli=1
 apc.serializer=igbinary
 --FILE--
