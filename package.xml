@@ -29,7 +29,7 @@
  <time>08:00:00</time>
  <version>
   <!-- Remember to update PHP_IGBINARY_VERSION in igbinary.h before release -->
-  <release>1.2.0</release>
+  <release>1.2.1dev</release>
   <api>1.1.1</api>
  </version>
  <stability>
@@ -38,9 +38,7 @@
  </stability>
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">New BSD</license>
  <notes>
-- PECL bug #22614, igbinary_unserialize(FALSE) must return FALSE
-- PHP bug #54662, unserializing nested objects cause crash
-- Other fixes
+-
  </notes>
  <contents>
   <dir name="/">
@@ -126,6 +124,24 @@
  <providesextension>igbinary</providesextension>
  <extsrcrelease />
  <changelog>
+  <release>
+ <date>2014-08-28</date>
+ <time>08:00:00</time>
+   <version>
+    <release>1.2.0</release>
+    <api>1.1.1</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <license uri="http://opensource.dynamoid.com/#license">New BSD</license>
+   <notes>
+- PECL bug #22614, igbinary_unserialize(FALSE) must return FALSE
+- PHP bug #54662, unserializing nested objects cause crash
+- Other fixes
+   </notes>
+  </release>
   <release>
    <date>2011-03-14</date>
    <time>12:32:48</time>
