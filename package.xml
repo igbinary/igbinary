@@ -28,6 +28,7 @@
  <date>2014-08-28</date>
  <time>08:00:00</time>
  <version>
+  <!-- Remember to update PHP_IGBINARY_VERSION in igbinary.h before release -->
   <release>1.2.0</release>
   <api>1.1.1</api>
  </version>
