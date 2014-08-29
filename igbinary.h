@@ -30,7 +30,7 @@
 #	define IGBINARY_API /* nothing special */
 #endif
 
-#define IGBINARY_VERSION "1.1.2-dev"
+#define IGBINARY_VERSION "1.2.1-dev"
 
 /** Struct that contains pointers to memory allocation and deallocation functions.
  * @see igbinary_serialize_data
