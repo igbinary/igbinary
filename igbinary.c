@@ -271,7 +271,7 @@ zend_module_entry igbinary_module_entry = {
 	NULL,
 	PHP_MINFO(igbinary),
 #if ZEND_MODULE_API_NO >= 20010901
-	IGBINARY_VERSION, /* Replace with version number for your extension */
+	PHP_IGBINARY_VERSION, /* Replace with version number for your extension */
 #endif
 	STANDARD_MODULE_PROPERTIES
 };
@@ -343,7 +343,7 @@ PHP_MINFO_FUNCTION(igbinary) {
 	(void) zend_module;
 	php_info_print_table_start();
 	php_info_print_table_row(2, "igbinary support", "enabled");
-	php_info_print_table_row(2, "igbinary version", IGBINARY_VERSION);
+	php_info_print_table_row(2, "igbinary version", PHP_IGBINARY_VERSION);
 #if defined(HAVE_APCU_SUPPORT)
 	php_info_print_table_row(2, "igbinary APCU serializer ABI", APC_SERIALIZER_ABI);
 #elif defined(HAVE_APC_SUPPORT)
