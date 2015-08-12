@@ -1516,8 +1516,9 @@ static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z
 		case IS_NULL:
 			return igbinary_serialize_null(igsd TSRMLS_CC);
 		case IS_TRUE:
+			return igbinary_serialize_bool(igsd, 1);
 		case IS_FALSE:
-			return igbinary_serialize_bool(igsd, Z_LVAL_P(z) ? 1 : 0 TSRMLS_CC);
+			return igbinary_serialize_bool(igsd, 0);
 		case IS_DOUBLE:
 			return igbinary_serialize_double(igsd, Z_DVAL_P(z) TSRMLS_CC);
 		default:
