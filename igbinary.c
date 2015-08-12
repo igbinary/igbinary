@@ -1028,7 +1028,7 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 
 		/* we should still add element even if it's not OK,
 		 * since we already wrote the length of the array before */
-		if ((d = zend_hash_get_current_data_ex(h, &pos))) {
+		if ((d = zend_hash_get_current_data_ex(h, &pos)) == NULL) {
 			if (igbinary_serialize_null(igsd TSRMLS_CC)) {
 				return 1;
 			}
