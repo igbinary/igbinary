@@ -1986,6 +1986,7 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 			/* Keys must include a terminating null. */
 			/* Ensure buffer starts at the beginning. */
 
+			igsd->string0_buf.len = 0;
 			smart_string_appendl(&igsd->string0_buf, key, key_len);
 			smart_string_0(&igsd->string0_buf);
 			igsd_zstr = zend_string_init(igsd->string0_buf.c, igsd->string0_buf.len, 0);
