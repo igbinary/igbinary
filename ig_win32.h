@@ -8,13 +8,12 @@
 # endif
 
 # ifndef __cplusplus
-#  if !0
-typedef enum { false = 0, true = 1 } _Bool;
-#  endif
-# else
-typedef bool _Bool;
+#ifdef HAVE_STDBOOL_H
+# include <stdbool.h>
+#else
+  typedef enum {false = 0, true = 1} bool;
+#endif
 # endif
-# define bool _Bool
 
 # define false 0
 # define true 1
