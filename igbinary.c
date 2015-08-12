@@ -479,6 +479,7 @@ PHP_FUNCTION(igbinary_serialize) {
 	}
 
 	RETVAL_STRINGL((char *)string, string_len);
+	efree(string);
 }
 /* }}} */
 #ifdef HAVE_PHP_SESSION
