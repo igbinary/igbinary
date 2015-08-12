@@ -67,6 +67,6 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
  * @param[out] z Unserialized zval
  * @return 0 on success, 1 elsewhere.
  */
-IGBINARY_API int igbinary_unserialize(const uint8_t *buf, size_t buf_len, zval **z TSRMLS_DC);
+IGBINARY_API int igbinary_unserialize(const uint8_t *buf, size_t buf_len, zval *z TSRMLS_DC);
 
 #endif /* IGBINARY_H */
