@@ -7,17 +7,22 @@
 # define inline __inline
 # endif
 
-# ifndef __cplusplus
-#ifdef HAVE_STDBOOL_H
-# include <stdbool.h>
-#else
-  typedef enum {false = 0, true = 1} bool;
-#endif
-# endif
+# if _MSC_VER >= 1900
+#  include <stdbool.h>
+# else
+#  ifndef __cplusplus
+#   if !0
+     typedef enum { false = 0, true = 1 } _Bool;
+#   endif
+#  else
+     typedef bool _Bool;
+#  endif
+#  define bool _Bool
 
-# define false 0
-# define true 1
-# define __bool_true_false_are_defined 1
+#  define false 0
+#  define true 1
+#  define __bool_true_false_are_defined 1
+# endif
 #endif
 
 #endif
