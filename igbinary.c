@@ -1480,6 +1480,10 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 /* {{{ igbinary_serialize_zval */
 /** Serialize zval. */
 static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z TSRMLS_DC) {
+	if (Z_TYPE_P(z) == IS_INDIRECT) {
+		z = Z_INDIRECT_P(z);
+	}
+
 	if (Z_ISREF_P(z)) {
 		if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_ref TSRMLS_CC) != 0) {
 			return 1;
@@ -2102,7 +2106,7 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 	do {
 		/* Try to find class directly */
 		name_zstring = zend_string_init(name, name_len, 0);
-		if ((pce = zend_lookup_class(name_zstring)) == SUCCESS) {
+		if ((pce = zend_lookup_class(name_zstring)) != NULL) {
 			ce = pce;
 			zend_string_release(name_zstring);
 			break;
