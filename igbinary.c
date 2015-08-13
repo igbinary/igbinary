@@ -488,30 +488,27 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 {
 	struct igbinary_serialize_data igsd;
 	uint8_t *tmpbuf;
+	zend_string *buf = NULL;
 
 	if (igbinary_serialize_data_init(&igsd, false, NULL TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
-		// TODO Sean-Der
-		//return FAILURE;
+		return buf;
 	}
 
 	if (igbinary_serialize_header(&igsd TSRMLS_CC) != 0) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
-		// TODO Sean-Der
-		//return FAILURE;
+		return buf;
 	}
 
 	if (igbinary_serialize_array(&igsd, &PS(http_session_vars), false, false TSRMLS_CC) != 0) {
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
-		// TODO Sean-Der
-		//return FAILURE;
+		return buf;
 	}
 
 	if (igbinary_serialize8(&igsd, 0 TSRMLS_CC) != 0) {
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
-		// TODO Sean-Der
-		// return FAILURE;
+		return buf;
 	}
 
 	/* shrink buffer to the real length, ignore errors */
@@ -520,16 +517,10 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 		igsd.buffer = tmpbuf;
 	}
 
-	// TODO Sean-Der
-	//return FAILURE;
-	//*newstr = (char *)igsd.buffer;
-	//if (newlen) {
-	//	*newlen = igsd.buffer_size - 1;
-	//}
-
+	buf = zend_string_init((char *)igsd.buffer, igsd.buffer_size, 0);
 	igbinary_serialize_data_deinit(&igsd, 0 TSRMLS_CC);
-
-	return SUCCESS;
+	efree(igsd.buffer);
+	return buf;
 }
 /* }}} */
 /* {{{ Serializer decode function */
