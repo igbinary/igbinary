@@ -1461,6 +1461,7 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 		/* cleanup */
 		zval_ptr_dtor(&h);
 		zend_string_release(hash_key);
+		zval_ptr_dtor(&f);
 		return r;
 	} else {
 		zend_string_release(hash_key);
@@ -1852,7 +1853,7 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 
 	HashTable *h;
 
-	zend_string *igsd_zstr;
+	zend_string *hash_key;
 
 	if (t == igbinary_type_array8) {
 		if (igsd->buffer_offset + 1 > igsd->buffer_size) {
@@ -1978,26 +1979,20 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		}
 
 		if (key) {
-			/* Keys must include a terminating null. */
-			/* Ensure buffer starts at the beginning. */
+			hash_key = zend_string_init(key, key_len, 0);
 
-			igsd->string0_buf.len = 0;
-			smart_string_appendl(&igsd->string0_buf, key, key_len);
-			smart_string_0(&igsd->string0_buf);
-			igsd_zstr = zend_string_init(igsd->string0_buf.c, igsd->string0_buf.len, 0);
-/*
-			if (zend_symtable_find(h, key, key_len + 1, (void **)&old_v) == SUCCESS) {
-				var_push_dtor(var_hash, old_v);
+			if (object) {
+				const char *class_name, *prop_name;
+				size_t prop_len;
+
+				zend_unmangle_property_name_ex(hash_key, &class_name, &prop_name, &prop_len);
+				zend_update_property(Z_OBJCE_P(z), z, prop_name, prop_len, &v);
+			} else {
+				zend_hash_update(h, hash_key, &v);
 			}
-*/
-			zend_symtable_update(h, igsd_zstr, &v);
-			zend_string_release(igsd_zstr);
+
+			zend_string_release(hash_key);
 		} else {
-/*
-			if (zend_hash_index_find(h, key_index, (void **)&old_v) == SUCCESS) {
-				var_push_dtor(var_hash, old_v);
-			}
-*/
 			zend_hash_index_update(h, key_index, &v);
 		}
 	}
@@ -2068,7 +2063,7 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 	zend_class_entry *ce;
 	zend_class_entry *pce;
 
-	zval *h = NULL;
+	zval h;
 	zval f;
 
 	char *name = NULL;
@@ -2191,15 +2186,12 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 	hash_key = zend_string_init("__wakeup", sizeof("__wakeup") - 1, 0);
 	if (Z_OBJCE_P(z) != PHP_IC_ENTRY && zend_hash_exists(&Z_OBJCE_P(z)->function_table, hash_key)) {
 		ZVAL_STRINGL(&f, "__wakeup", sizeof("__wakeup") - 1);
-		call_user_function_ex(CG(function_table), z, &f, h, 0, 0, 1, NULL TSRMLS_CC);
-
-		if (h) {
-			zval_ptr_dtor(h);
-		}
+		call_user_function_ex(CG(function_table), z, &f, &h, 0, 0, 1, NULL TSRMLS_CC);
 
 		if (EG(exception)) {
 			r = 1;
 		}
+		zval_ptr_dtor(&f);
 	}
 	zend_string_release(hash_key);
 
