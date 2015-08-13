@@ -1981,7 +1981,7 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		if (key) {
 			hash_key = zend_string_init(key, key_len, 0);
 
-			if (object) {
+			if (object && Z_OBJCE_P(z) != PHP_IC_ENTRY) {
 				const char *class_name, *prop_name;
 				size_t prop_len;
 
