@@ -238,7 +238,6 @@ zend_function_entry igbinary_functions[] = {
 /* }}} */
 
 /* {{{ igbinary dependencies */
-#if ZEND_MODULE_API_NO >= 20050922
 static const zend_module_dep igbinary_module_deps[] = {
 	ZEND_MOD_REQUIRED("standard")
 #ifdef HAVE_PHP_SESSION
@@ -251,17 +250,12 @@ static const zend_module_dep igbinary_module_deps[] = {
 #endif
 	{NULL, NULL, NULL}
 };
-#endif
 /* }}} */
 
 /* {{{ igbinary_module_entry */
 zend_module_entry igbinary_module_entry = {
-#if ZEND_MODULE_API_NO >= 20050922
 	STANDARD_MODULE_HEADER_EX, NULL,
 	igbinary_module_deps,
-#elif ZEND_MODULE_API_NO >= 20010901
-	STANDARD_MODULE_HEADER,
-#endif
 	"igbinary",
 	igbinary_functions,
 	PHP_MINIT(igbinary),
@@ -269,9 +263,7 @@ zend_module_entry igbinary_module_entry = {
 	NULL,
 	NULL,
 	PHP_MINFO(igbinary),
-#if ZEND_MODULE_API_NO >= 20010901
 	PHP_IGBINARY_VERSION, /* Replace with version number for your extension */
-#endif
 	STANDARD_MODULE_PROPERTIES
 };
 /* }}} */
@@ -1477,6 +1469,7 @@ static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z
 	}
 
 	if (Z_ISREF_P(z)) {
+		ZVAL_DEREF(z);
 		if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_ref TSRMLS_CC) != 0) {
 			return 1;
 		}
@@ -1886,10 +1879,7 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 
 	if (!object) {
 		array_init(z);
-		// TODO Sean-Der
-		//Z_TYPE_PP(z) = IS_ARRAY;
-		//ALLOC_HASHTABLE(Z_ARRVAL_PP(z));
-		//zend_hash_init(Z_ARRVAL_PP(z), n + 1, NULL, ZVAL_PTR_DTOR, 0);
+		zend_hash_init(Z_ARRVAL_P(z), n + 1, NULL, ZVAL_PTR_DTOR, 0);
 
 		/* references */
 		if (igsd->references_count + 1 >= igsd->references_capacity) {
@@ -2117,10 +2107,7 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 			zval_ptr_dtor(&args[0]);
 			break;
 		}
-		//TODO Sean-Der
-		//if (retval_ptr) {
-		//	zval_ptr_dtor(&retval_ptr);
-		//}
+		zval_ptr_dtor(&retval_ptr);
 
 		/* The callback function may have defined the class */
 		name_zstring = zend_string_init(name, name_len, 0);
