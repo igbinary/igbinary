@@ -509,7 +509,7 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 		igsd.buffer = tmpbuf;
 	}
 
-	buf = zend_string_init((char *)igsd.buffer, igsd.buffer_size, 0);
+	buf = zend_string_init((char *)igsd.buffer, igsd.buffer_size - 1, 0);
 	igbinary_serialize_data_deinit(&igsd, 0 TSRMLS_CC);
 	efree(igsd.buffer);
 	return buf;
@@ -929,6 +929,10 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	zend_string *str_key;
 	int key_type;
 	ulong key_index;
+
+	if (Z_ISREF_P(z)) {
+		ZVAL_DEREF(z);
+	}
 
 	/* hash */
 	h = object ? Z_OBJPROP_P(z) : HASH_OF(z);
