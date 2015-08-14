@@ -1968,7 +1968,8 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		if (igbinary_unserialize_zval(igsd, &v)) {
 			zval_dtor(z);
 			ZVAL_NULL(z);
-			zval_ptr_dtor(&v);
+			// TODO Causing double frees --Sean-Der
+			//zval_ptr_dtor(&v);
 			return 1;
 		}
 
@@ -2223,7 +2224,8 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 	}
 
 	if (*z != NULL) {
-		zval_ptr_dtor(*z);
+		// TODO Causing double frees --Sean-Der
+		//zval_ptr_dtor(*z);
 	}
 
 	*z = igsd->references[n];
