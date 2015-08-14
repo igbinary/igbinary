@@ -1038,15 +1038,13 @@ inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *i
 		zval *z;
 		struct {
 			zend_class_entry *ce;
-			// TODO Sean-Der
-			//zend_object_handle handle;
+			unsigned int handle;
 		} obj;
 	} key = { 0 };
 
-	if (object && Z_TYPE_P(z) == IS_OBJECT /* TODO Sean-Der && Z_OBJ_HT_P(z)->get_class_entry */) {
+	if (object && Z_TYPE_P(z) == IS_OBJECT && Z_OBJCE_P(z)) {
 		key.obj.ce = Z_OBJCE_P(z);
-		// TODO Sean-Der
-		// key.obj.handle = Z_OBJ_HANDLE_P(z);
+		key.obj.handle = Z_OBJ_HANDLE_P(z);
 	} else {
 		key.z = z;
 	}
