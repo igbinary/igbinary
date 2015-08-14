@@ -2116,7 +2116,7 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 
 		/* The callback function may have defined the class */
 		name_zstring = zend_string_init(name, name_len, 0);
-		if ((pce = zend_lookup_class(name_zstring)) == SUCCESS) {
+		if ((pce = zend_lookup_class(name_zstring)) != NULL) {
 			ce = pce;
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Function %s() hasn't defined the class it was called for", name);
