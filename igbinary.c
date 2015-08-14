@@ -1435,7 +1435,7 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 		if (r == SUCCESS && !EG(exception)) {
 			r = 0;
 
-			if (Z_TYPE_P(&h) == IS_UNDEF) {
+			if (Z_TYPE_P(&h) != IS_UNDEF) {
 				if (Z_TYPE_P(&h) == IS_ARRAY) {
 					r = igbinary_serialize_array_sleep(igsd, z, HASH_OF(&h), ce, incomplete_class TSRMLS_CC);
 				} else {
