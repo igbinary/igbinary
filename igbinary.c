@@ -2283,6 +2283,7 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 					igsd->references[igsd->references_count++] = (void *) *z;
 			}
 			ZVAL_MAKE_REF(*z);
+			Z_TRY_ADDREF_P(*z);
 			break;
 		case igbinary_type_objref8:
 		case igbinary_type_objref16:
