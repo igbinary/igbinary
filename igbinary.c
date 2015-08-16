@@ -1837,8 +1837,7 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 	size_t n;
 	size_t i;
 
-	zval v = {}, *v_ptr;
-	v_ptr = &v;
+	zval v, *v_ptr;
 
 	char *key;
 	size_t key_len = 0;
@@ -1849,6 +1848,9 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 	HashTable *h;
 
 	zend_string *hash_key;
+
+	ZVAL_UNDEF(&v);
+	v_ptr = &v;
 
 	if (t == igbinary_type_array8) {
 		if (igsd->buffer_offset + 1 > igsd->buffer_size) {
@@ -2228,7 +2230,7 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 	*z = igsd->references[n];
 	Z_TRY_ADDREF_P(*z);
 
-	if (t == igbinary_type_objref8 || t == igbinary_type_objref16 || t == igbinary_type_objref32) {
+	if ((t == igbinary_type_objref8 || t == igbinary_type_objref16 || t == igbinary_type_objref32) && Z_ISREF_P(*z)) {
 		ZVAL_UNREF(*z);
 	}
 
