@@ -9,7 +9,7 @@ if(!extension_loaded('igbinary')) {
 <?php
 
 class Bar {
-    public $a = [];
+    public $a = array();
     public $b = array();
     public $c = NULL;
     private $_d = NULL;
@@ -23,7 +23,7 @@ class Foo extends Bar {
 }
 
 $x = new Foo();
-$x->a = [1, 2, 3];
+$x->a = array(1, 2, 3);
 $x->nonexistent = 'aaa';
 
 igbinary_unserialize(igbinary_serialize($x));
