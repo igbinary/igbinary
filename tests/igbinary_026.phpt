@@ -2,6 +2,7 @@
 Cyclic array test
 --INI--
 report_memleaks=0
+igbinary.compact_strings=1
 --SKIPIF--
 <?php
 if(!extension_loaded('igbinary')) {

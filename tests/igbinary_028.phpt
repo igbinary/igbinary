@@ -15,8 +15,9 @@ $array = preg_grep('/^igbinary session support.*yes/', $array);
 if (!$array) {
 	exit('skip igbinary session handler not available');
 }
-
-
+?>
+--INI--
+igbinary.compact_strings=1
 --FILE--
 <?php 
 
