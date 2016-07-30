@@ -108,6 +108,10 @@ cd modules
 
 Similar approach should work for APC.
 
+### Installing on Windows
+
+If you are a contributor to/packager of igbinary, see [WINDOWS.md](./WINDOWS.md)
+
 Bugs & Contributions
 --------------------
 
