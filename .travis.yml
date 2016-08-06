@@ -1,4 +1,5 @@
 language: php
+
 php:
   - 7.0
   - 5.6
@@ -6,19 +7,31 @@ php:
   - 5.4
   - 5.3
 
+cache:
+  directories:
+    - $HOME/travis_cache
+
 env:
   - CC=clang   CFLAGS=""
   - CC=clang   CFLAGS="-g -O0"
   - CC=gcc-4.6 CFLAGS=""
   - CC=gcc-4.6 CFLAGS="-g -O0 -fstack-protector -fstack-protector-all"
   - CC=gcc-4.6 CFLAGS="-g" VALGRIND=1
+  - CC=gcc-4.6 CXX=g++-4.6 USE_32BIT=1 VALGRIND=1 PHP_CUSTOM=maintainer-zts PHP_CONFIGURE_ARGS='--disable-all --enable-maintainer-zts --enable-debug --enable-cgi --enable-session --enable-json'
 
 install:
   - sudo apt-get update -qq
-  - if [ "$VALGRIND" -eq 1 ]; then sudo apt-get install -qq valgrind; export TEST_PHP_ARGS="-m"; fi
   - sudo apt-get install -qq $CC
+  # For 32-bit installations: Install multilib so it can be compiled, as well libc6-dbg:i386 so that valgrind will work.
+  - if [ "x$USE_32BIT" != "x" ]; then sudo apt-get install -y $CXX g++-multilib libc6-dev-i386 libc6-dbg:i386; export CC="$PWD/ci/gcc-32.sh"; export CXX="$PWD/ci/g++-32.sh"; $CC --version;  fi
+  # If making a 32-bit build: Automatically determine and download the latest patch of each minor version we support.
+  - if [ "x$PHP_CUSTOM" != "x" ]; then export PHP_CUSTOM_VERSION=$(./ci/get_global_php_version.sh); echo "Version is $PHP_CUSTOM_VERSION"; ./ci/install_php_custom.sh || exit 1; export PATH="$(./ci/generate_php_install_dir.sh)/bin:$PATH"; export PHPRC=$PWD/ci/; else ./ci/wipe_travis_cache.sh; fi
+  - if [ "$VALGRIND" -eq 1 ]; then sudo apt-get install -qq valgrind; export TEST_PHP_ARGS="-m"; fi
   - if [ "$VALGRIND" -eq 1 ]; then valgrind --version; fi
   - $CC --version
+
+before_script:
+  - $CC --version && ci/print_php_int_max.php
 
 script:
   - phpize
