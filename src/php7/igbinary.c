@@ -23,7 +23,6 @@
 
 #if PHP_MAJOR_VERSION >= 7
 /* FIXME: still fix sessions and the APC-thingy */
-# undef HAVE_PHP_SESSION
 # undef HAVE_APC_SUPPORT
 # undef HAVE_APCU_SUPPORT
 #endif
@@ -351,7 +350,8 @@ PHP_MSHUTDOWN_FUNCTION(igbinary) {
 #endif
 
 	/*
-	 * unregister serializer?
+	 * Clean up ini entries.
+	 * Aside: It seems like the php_session_register_serializer unserializes itself, since MSHUTDOWN in ext/wddx/wddx.c doesn't exist?
 	 */
 	UNREGISTER_INI_ENTRIES();
 
@@ -579,61 +579,49 @@ PHP_FUNCTION(igbinary_serialize) {
 /* {{{ Serializer encode function */
 PS_SERIALIZER_ENCODE_FUNC(igbinary)
 {
+	zend_string *result;
+	zend_string *key;
 	struct igbinary_serialize_data igsd;
 	uint8_t *tmpbuf;
 
 	if (igbinary_serialize_data_init(&igsd, false, NULL TSRMLS_CC)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
-		return FAILURE;
+		return zend_string_init("", 0, 0);
 	}
 
 	if (igbinary_serialize_header(&igsd TSRMLS_CC) != 0) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
-		return FAILURE;
+		return zend_string_init("", 0, 0);
 	}
 
-	if (igbinary_serialize_array(&igsd, PS(http_session_vars), false, false TSRMLS_CC) != 0) {
+	if (igbinary_serialize_array(&igsd, &(PS(http_session_vars)), false, false TSRMLS_CC) != 0) {
 		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
-		return FAILURE;
+		zend_error(E_WARNING, "igbinary_serialize: cannot serialize session variables");
+		return zend_string_init("", 0, 0);
 	}
 
-	if (igbinary_serialize8(&igsd, 0 TSRMLS_CC) != 0) {
-		igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
-		return FAILURE;
-	}
+	/* Copy the buffer to a new zend_string */
+	/* TODO: Clean up igsd->mm, and make this a pointer swap instead? It's only used for building up the serialization data buffer. */
+	result = zend_string_init(igsd.buffer, igsd.buffer_size, 0);
+	igbinary_serialize_data_deinit(&igsd, 1 TSRMLS_CC);
 
-	/* shrink buffer to the real length, ignore errors */
-	tmpbuf = (uint8_t *)igsd.mm.realloc(igsd.buffer, igsd.buffer_size, igsd.mm.context);
-	if (tmpbuf != NULL) {
-		igsd.buffer = tmpbuf;
-	}
-
-	*newstr = (char *)igsd.buffer;
-	if (newlen) {
-		*newlen = igsd.buffer_size - 1;
-	}
-
-	igbinary_serialize_data_deinit(&igsd, 0 TSRMLS_CC);
-
-	return SUCCESS;
+	return result;
 }
 /* }}} */
 /* {{{ Serializer decode function */
 PS_SERIALIZER_DECODE_FUNC(igbinary) {
-	HashPosition tmp_hash_pos;
 	HashTable *tmp_hash;
-	char *key_str;
-	zend_ulong key_long;
 	int tmp_int;
-	uint key_len;
-	zval *z;
-	zval **d;
+	zval z;
+	zval *d;
+	zend_string *key;
 
 	struct igbinary_unserialize_data igsd;
 
-	if (!val || vallen==0)
+	if (!val || vallen==0) {
 		return SUCCESS;
+	}
 
 	if (igbinary_unserialize_data_init(&igsd TSRMLS_CC) != 0) {
 		return FAILURE;
@@ -647,35 +635,34 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 		return FAILURE;
 	}
 
-	ALLOC_INIT_ZVAL(z);
 	if (igbinary_unserialize_zval(&igsd, &z, WANT_CLEAR TSRMLS_CC)) {
 		igbinary_unserialize_data_deinit(&igsd TSRMLS_CC);
-		zval_dtor(z);
-		FREE_ZVAL(z);
 		return FAILURE;
 	}
 
 	igbinary_unserialize_data_deinit(&igsd TSRMLS_CC);
 
-	tmp_hash = HASH_OF(z);
-
-	zend_hash_internal_pointer_reset_ex(tmp_hash, &tmp_hash_pos);
-	while (zend_hash_get_current_data_ex(tmp_hash, (void *) &d, &tmp_hash_pos) == SUCCESS) {
-		tmp_int = zend_hash_get_current_key_ex(tmp_hash, &key_str, &key_len, &key_long, 0, &tmp_hash_pos);
-
-		switch (tmp_int) {
-			case HASH_KEY_IS_LONG:
-				/* ??? */
-				break;
-			case HASH_KEY_IS_STRING:
-				php_set_session_var(key_str, key_len-1, *d, NULL TSRMLS_CC);
-				php_add_session_var(key_str, key_len-1 TSRMLS_CC);
-				break;
-		}
-		zend_hash_move_forward_ex(tmp_hash, &tmp_hash_pos);
+	tmp_hash = HASH_OF(&z);
+	if (tmp_hash == NULL) {
+		zval_ptr_dtor(&z);
+		return FAILURE;
 	}
-	zval_dtor(z);
-	FREE_ZVAL(z);
+
+	ZEND_HASH_FOREACH_STR_KEY_VAL(tmp_hash, key, d) {
+		if (key == NULL) {  /* array key is a number, how? Skip it. */
+			/* ??? */
+			continue;
+		}
+		if (php_set_session_var(key, d, NULL TSRMLS_CC)) { /* Added to session successfully */
+			/* Refcounted types such as arrays, objects, references need to have references incremented manually, so that zval_ptr_dtor doesn't clean up pointers they include. */
+			/* Non-refcounted types have the data copied. */
+			if (Z_REFCOUNTED_P(d)) {
+				Z_ADDREF_P(d);
+			}
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	zval_ptr_dtor(&z);
 
 	return SUCCESS;
 }
