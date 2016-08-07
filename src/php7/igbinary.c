@@ -964,44 +964,47 @@ inline static int igbinary_serialize_string(struct igbinary_serialize_data *igsd
 		return 0;
 	}
 
-	if (igsd->scalar || !igsd->compact_strings || hash_si_find(&igsd->strings, s, len, i) == 1) {
-		if (!igsd->scalar && igsd->compact_strings) {
-			hash_si_insert(&igsd->strings, s, len, igsd->string_count);
-		}
+	if (!igsd->scalar && igsd->compact_strings) {
+		struct hash_si_result result = hash_si_find_or_insert(&igsd->strings, s, len, igsd->string_count);
+		if (result.code == hash_si_code_exists) {
+			uint32_t value = result.value;
+			if (value <= 0xff) {
+				if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id8 TSRMLS_CC) != 0) {
+					return 1;
+				}
 
-		igsd->string_count += 1;
+				if (igbinary_serialize8(igsd, (uint8_t) value TSRMLS_CC) != 0) {
+					return 1;
+				}
+			} else if (value <= 0xffff) {
+				if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id16 TSRMLS_CC) != 0) {
+					return 1;
+				}
 
-		if (igbinary_serialize_chararray(igsd, s, len TSRMLS_CC) != 0) {
-			return 1;
-		}
-	} else {
-		if (*i <= 0xff) {
-			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id8 TSRMLS_CC) != 0) {
-				return 1;
-			}
+				if (igbinary_serialize16(igsd, (uint16_t) value TSRMLS_CC) != 0) {
+					return 1;
+				}
+			} else {
+				if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id32 TSRMLS_CC) != 0) {
+					return 1;
+				}
 
-			if (igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC) != 0) {
-				return 1;
+				if (igbinary_serialize32(igsd, (uint32_t) value TSRMLS_CC) != 0) {
+					return 1;
+				}
 			}
-		} else if (*i <= 0xffff) {
-			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id16 TSRMLS_CC) != 0) {
-				return 1;
-			}
-
-			if (igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC) != 0) {
-				return 1;
-			}
+			return 0;
+		} else if (EXPECTED(result.code == hash_si_code_inserted)) {
+			/* Fall through to igbinary_serialize_chararray */
 		} else {
-			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_string_id32 TSRMLS_CC) != 0) {
-				return 1;
-			}
-
-			if (igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC) != 0) {
-				return 1;
-			}
+			return 1;  /* Failed to allocate copy of string */
 		}
 	}
 
+	igsd->string_count++; /* A new string is being serialized - update count so that duplicate class names can be used. */
+	if (igbinary_serialize_chararray(igsd, s, len TSRMLS_CC) != 0) {
+		return 1;
+	}
 	return 0;
 }
 /* }}} */
@@ -1387,8 +1390,8 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 	uint32_t t;
 	uint32_t *i = &t;
 
-	if (hash_si_find(&igsd->strings, class_name, name_len, i) == 1) {
-		hash_si_insert(&igsd->strings, class_name, name_len, igsd->string_count);
+	struct hash_si_result result = hash_si_find_or_insert(&igsd->strings, class_name, name_len, igsd->string_count);
+	if (result.code == hash_si_code_inserted) {
 		igsd->string_count += 1;
 
 		if (name_len <= 0xff) {
@@ -1423,22 +1426,23 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 
 		memcpy(igsd->buffer+igsd->buffer_size, class_name, name_len);
 		igsd->buffer_size += name_len;
-	} else {
+	} else if (EXPECTED(result.code == hash_si_code_exists)) {
 		/* already serialized string */
-		if (*i <= 0xff) {
+		uint32_t value = result.value;
+		if (value <= 0xff) {
 			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id8 TSRMLS_CC) != 0) {
 				return 1;
 			}
 
-			if (igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC) != 0) {
+			if (igbinary_serialize8(igsd, (uint8_t) value TSRMLS_CC) != 0) {
 				return 1;
 			}
-		} else if (*i <= 0xffff) {
+		} else if (value <= 0xffff) {
 			if (igbinary_serialize8(igsd, (uint8_t) igbinary_type_object_id16 TSRMLS_CC) != 0) {
 				return 1;
 			}
 
-			if (igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC) != 0) {
+			if (igbinary_serialize16(igsd, (uint16_t) value TSRMLS_CC) != 0) {
 				return 1;
 			}
 		} else {
@@ -1446,10 +1450,12 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 				return 1;
 			}
 
-			if (igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC) != 0) {
+			if (igbinary_serialize32(igsd, (uint32_t) value TSRMLS_CC) != 0) {
 				return 1;
 			}
 		}
+	} else {
+		return 1; /* Failed to allocate copy of string */
 	}
 
 	return 0;

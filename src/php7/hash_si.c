@@ -40,7 +40,7 @@ int hash_si_init(struct hash_si *h, size_t size) {
 
 	h->size = size;
 	h->used = 0;
-	h->data = (struct hash_si_pair *) malloc(sizeof(struct hash_si_pair) * size);
+	h->data = (struct hash_si_pair *) emalloc(sizeof(struct hash_si_pair) * size);
 	if (h->data == NULL) {
 		return 1;
 	}
@@ -56,11 +56,11 @@ void hash_si_deinit(struct hash_si *h) {
 
 	for (i = 0; i < h->size; i++) {
 		if (h->data[i].key != NULL) {
-			free(h->data[i].key);
+			efree(h->data[i].key);
 		}
 	}
 
-	free(h->data);
+	efree(h->data);
 
 	h->size = 0;
 	h->used = 0;
@@ -71,91 +71,29 @@ void hash_si_deinit(struct hash_si *h) {
  * @param h Pointer to hash_si struct.
  * @param key Pointer to key.
  * @param key_len Key length.
+ * @param key_hash precomputed key hash of bytes of key (=zend_inline_hash_func(key, key_len))
  * @return index.
  */
-inline static size_t _hash_si_find(struct hash_si *h, const char *key, size_t key_len) {
+inline static size_t _hash_si_find(const struct hash_si *h, const char *key, const size_t key_len, const uint32_t key_hash) {
 	uint32_t hv;
 	size_t size;
+	size_t mask;
 
 	assert(h != NULL);
 
 	size = h->size;
-	hv = zend_inline_hash_func(key, key_len) & (h->size-1);
+	mask = size - 1;
+	hv = key_hash & mask;
 
 	while (size > 0 &&
 		h->data[hv].key != NULL &&
-		(h->data[hv].key_len != key_len || memcmp(h->data[hv].key, key, key_len) != 0)) {
+		(h->data[hv].key_hash != key_hash || h->data[hv].key_len != key_len || UNEXPECTED(memcmp(h->data[hv].key, key, key_len) != 0))) {
 		/* linear prob */
-		hv = (hv + 1) & (h->size-1);
+		hv = (hv + 1) & mask;
 		size--;
 	}
 
 	return hv;
-}
-/* }}} */
-/* {{{ hash_si_remove */
-int hash_si_remove(struct hash_si *h, const char *key, size_t key_len, uint32_t *value) {
-	uint32_t hv;
-	uint32_t j, k;
-
-	assert(h != NULL);
-
-	hv = _hash_si_find(h, key, key_len);
-
-	/* dont exists */
-	if (h->data[hv].key == NULL) {
-		return 1;
-	}
-
-	h->used--;
-
-	free(h->data[hv].key);
-
-	if (value != NULL)
-		*value = h->data[hv].value;
-
-	j = (hv + 1) & (h->size-1);
-	while (h->data[j].key != NULL) {
-		k = zend_inline_hash_func(h->data[j].key, strlen(h->data[j].key)) & (h->size-1);
-		if ((j > hv && (k <= hv || k > j)) || (j < hv && (k <= hv && k > j))) {
-			h->data[hv].key = h->data[j].key;
-			h->data[hv].key_len = h->data[j].key_len;
-			h->data[hv].value = h->data[j].value;
-
-			hv = j;
-		}
-		j = (j + 1) & (h->size-1);
-	}
-	h->data[hv].key = NULL;
-
-
-	return 0;
-/*
- *     loop
- *            j := (j+1) modulo num_slots
- *	            if slot[j] is unoccupied
- *		             exit loop
- *			          k := hash(slot[j].key) modulo num_slots
- *			          if (j > i and (k <= i or k > j)) or
- *			            (j < i and (k <= i and k > j)) (note 2)
- *			               slot[i] := slot[j]
- *			                i := j
- *			      mark slot[i] as unoccupied
- *
- * For all records in a cluster, there must be no vacant slots between their natural
- * hash position and their current position (else lookups will terminate before finding
- * the record). At this point in the pseudocode, i is a vacant slot that might be
- * invalidating this property for subsequent records in the cluster. j is such a
- * subsequent record. k is the raw hash where the record at j would naturally land in
- * the hash table if there were no collisions. This test is asking if the record at j
- * is invalidly positioned with respect to the required properties of a cluster now
- * that i is vacant.
- *
- * Another technique for removal is simply to mark the slot as deleted. However
- * this eventually requires rebuilding the table simply to remove deleted records.
- * The methods above provide O(1) updating and removal of existing records, with
- * occasional rebuilding if the high water mark of the table size grows.
- */
 }
 /* }}} */
 /* {{{ hash_si_rehash */
@@ -163,7 +101,6 @@ int hash_si_remove(struct hash_si *h, const char *key, size_t key_len, uint32_t 
  * @param h Pointer to hash_si struct.
  */
 inline static void hash_si_rehash(struct hash_si *h) {
-	uint32_t hv;
 	size_t i;
 	struct hash_si newh;
 
@@ -172,20 +109,20 @@ inline static void hash_si_rehash(struct hash_si *h) {
 	hash_si_init(&newh, h->size * 2);
 
 	for (i = 0; i < h->size; i++) {
-		if (h->data[i].key != NULL) {
-			hv = _hash_si_find(&newh, h->data[i].key, h->data[i].key_len);
-			newh.data[hv].key = h->data[i].key;
-			newh.data[hv].key_len = h->data[i].key_len;
-			newh.data[hv].value = h->data[i].value;
+		const struct hash_si_pair *old_pair = &(h->data[i]);
+		if (old_pair->key != NULL) {
+			uint32_t hv = _hash_si_find(&newh, old_pair->key, old_pair->key_len, old_pair->key_hash);
+			newh.data[hv] = *old_pair;
 		}
 	}
 
-	free(h->data);
+	efree(h->data);
 	h->data = newh.data;
 	h->size *= 2;
 }
 /* }}} */
 /* {{{ hash_si_insert */
+/*
 int hash_si_insert(struct hash_si *h, const char *key, size_t key_len, uint32_t value) {
 	uint32_t hv;
 
@@ -196,7 +133,7 @@ int hash_si_insert(struct hash_si *h, const char *key, size_t key_len, uint32_t 
 	hv = _hash_si_find(h, key, key_len);
 
 	if (h->data[hv].key == NULL) {
-		h->data[hv].key = (char *) malloc(key_len + 1);
+		h->data[hv].key = (char *) emalloc(key_len + 1);
 		if (h->data[hv].key == NULL) {
 			return 1;
 		}
@@ -213,8 +150,10 @@ int hash_si_insert(struct hash_si *h, const char *key, size_t key_len, uint32_t 
 
 	return 0;
 }
+*/
 /* }}} */
 /* {{{ hash_si_find */
+/*
 int hash_si_find(struct hash_si *h, const char *key, size_t key_len, uint32_t *value) {
 	uint32_t hv;
 
@@ -229,8 +168,50 @@ int hash_si_find(struct hash_si *h, const char *key, size_t key_len, uint32_t *v
 		return 0;
 	}
 }
+*/
+/* }}} */
+/* {{{ hash_si_find_or_insert */
+struct hash_si_result hash_si_find_or_insert(struct hash_si *h, const char *key, size_t key_len, uint32_t value) {
+	uint32_t hv;
+	uint32_t key_hash;
+	struct hash_si_result result;
+	struct hash_si_pair *pair;
+
+	assert(h != NULL);
+
+	key_hash = zend_inline_hash_func(key, key_len);
+	hv = _hash_si_find(h, key, key_len, key_hash);
+	pair = &h->data[hv];
+
+	if (pair->key == NULL) {
+		char* copy = emalloc(key_len);
+		if (copy == NULL) {
+			result.code = hash_si_code_exception;
+			return result;
+		}
+		memcpy(copy, key, key_len);
+
+		pair->key = copy;
+		pair->key_len = key_len;
+		pair->key_hash = key_hash;
+		pair->value = value;
+
+		h->used++;
+		if (h->size / 4 * 3 < h->used) {
+			hash_si_rehash(h);
+		}
+
+		result.code = hash_si_code_inserted;
+		return result;
+	} else {
+		result.code = hash_si_code_exists;
+		result.value = h->data[hv].value;
+		return result;
+	}
+}
 /* }}} */
 /* {{{ hash_si_traverse */
+/*
 void hash_si_traverse(struct hash_si *h, int (*traverse_function) (const char *key, size_t key_len, uint32_t value)) {
 	size_t i;
 
@@ -242,6 +223,7 @@ void hash_si_traverse(struct hash_si *h, int (*traverse_function) (const char *k
 		}
 	}
 }
+*/
 /* }}} */
 /* {{{ hash_si_size */
 size_t hash_si_size(struct hash_si *h) {
