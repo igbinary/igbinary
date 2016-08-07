@@ -23,7 +23,7 @@ if (PHP_IGBINARY == "yes") {
   /* XXX tricky job here, override configure_module_dirname, define the basic extension,
      then set it back*/
   if (null != dll.match(/^php5/)) {
-	subdir = "src\\php5"
+    subdir = "src\\php5"
     php_igbinary_src_files = "igbinary.c hash_si.c"
   } else if (null != dll.match(/^php7/)) {
     subdir = "src\\php7";
