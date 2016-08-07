@@ -10,6 +10,8 @@
 #ifndef PHP_IGBINARY_H
 #define PHP_IGBINARY_H
 
+#include "php.h"
+
 /** Module entry of igbinary. */
 extern zend_module_entry igbinary_module_entry;
 #define phpext_igbinary_ptr &igbinary_module_entry
@@ -61,8 +63,6 @@ PHP_FUNCTION(igbinary_unserialize);
 #define IGBINARY_G(v) (igbinary_globals.v)
 #endif
 
-/** Binary protocol version of igbinary. */
-#define IGBINARY_FORMAT_VERSION 0x00000002
 
 /** Backport macros from php 5.3 */
 #ifndef Z_ISREF_P

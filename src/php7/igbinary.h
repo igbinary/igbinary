@@ -10,11 +10,21 @@
 #ifndef IGBINARY_H
 #define IGBINARY_H
 #ifdef PHP_WIN32
-# include "ig_win32.h"
+# include "win32/php_stdint.h"
 #else
 # include <stdint.h>
 #endif
-#include "php.h"
+
+/* Forward declarations. */
+struct zval;
+
+/* Constants and constant macros */
+/** Binary protocol version of igbinary. */
+#define IGBINARY_FORMAT_VERSION 0x00000002
+
+#define PHP_IGBINARY_VERSION "1.2.2-dev"
+
+/* Macros */
 
 #ifdef PHP_WIN32
 #	if defined(IGBINARY_EXPORTS) || (!defined(COMPILE_DL_IGBINARY))
@@ -29,8 +39,6 @@
 #else
 #	define IGBINARY_API /* nothing special */
 #endif
-
-#define PHP_IGBINARY_VERSION "1.2.2-dev"
 
 /** Struct that contains pointers to memory allocation and deallocation functions.
  * @see igbinary_serialize_data

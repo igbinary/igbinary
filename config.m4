@@ -79,7 +79,7 @@ if test "$PHP_IGBINARY" != "no"; then
   fi
 
   PHP_ADD_MAKEFILE_FRAGMENT(Makefile.bench)
-  PHP_INSTALL_HEADERS([ext/igbinary], [$subdir/igbinary.h])
+  PHP_INSTALL_HEADERS([ext/igbinary], [igbinary.h $subdir/igbinary.h])
   PHP_NEW_EXTENSION(igbinary, $PHP_IGBINARY_SRC_FILES, $ext_shared,, $PHP_IGBINARY_CFLAGS)
   PHP_ADD_EXTENSION_DEP(igbinary, session, true)
   PHP_SUBST(IGBINARY_SHARED_LIBADD)
