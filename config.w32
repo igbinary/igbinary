@@ -17,22 +17,24 @@ if (PHP_IGBINARY == "yes") {
   var dll = get_define('PHPDLL');
   var old_conf_dir = configure_module_dirname;
   var php_igbinary_src_files;
+  var subdir;
 
   /* Copied from solr config.w32 */
   /* XXX tricky job here, override configure_module_dirname, define the basic extension,
      then set it back*/
   if (null != dll.match(/^php5/)) {
-    configure_module_dirname = configure_module_dirname + "\\src\\php5";
+	subdir = "src\\php5"
     php_igbinary_src_files = "igbinary.c hash_si.c"
   } else if (null != dll.match(/^php7/)) {
-    configure_module_dirname = configure_module_dirname + "\\src\\php7";
+    subdir = "src\\php7";
     php_igbinary_src_files = "igbinary.c hash_si.c hash_si_ptr.c"
   } else {
     ERROR("Cannot match any known PHP version with '" + dll + "'");
   }
+  configure_module_dirname = configure_module_dirname + "\\" + subdir;
   EXTENSION("igbinary", php_igbinary_src_files);
   configure_module_dirname = old_conf_dir;
   AC_DEFINE('HAVE_IGBINARY', 1, 'Have igbinary support', false);
   ADD_EXTENSION_DEP('igbinary', 'session');
-  PHP_INSTALL_HEADERS('ext/igbinary', 'igbinary.h ' + configure_module_dirname + '\\igbinary.h');
+  PHP_INSTALL_HEADERS('ext/igbinary', 'igbinary.h ' + subdir + '\\igbinary.h');
 }
