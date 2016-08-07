@@ -30,7 +30,7 @@ if test "$PHP_IGBINARY" != "no"; then
 #endif
   ],[
   subdir=src/php5
-  PHP_IGBINARY_SRC_FILES="$subdir/igbinary.c $subdir/hash_si.c"
+  PHP_IGBINARY_SRC_FILES="$subdir/igbinary.c $subdir/hash_si.c $subdir/hash_si_ptr.c"
   AC_MSG_RESULT([PHP 5])
   ],[
   subdir=src/php7

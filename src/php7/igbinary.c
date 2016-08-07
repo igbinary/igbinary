@@ -1153,9 +1153,9 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 /* {{{ igbinary_serialize_array_ref */
 /** Serializes array reference (or reference in an object). Returns 0 on success. */
 inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *igsd, zval *z, bool object TSRMLS_DC) {
-	uint32_t t = 0;
-	uint32_t *i = &t;
-	zend_uintptr_t key = 0;  /* The address of the pointer to the zend_refcounted struct or other struct */
+	size_t t;
+	zend_uintptr_t key;  /* The address of the pointer to the zend_refcounted struct or other struct */
+	static int INVALID_KEY;  /* Not used, but we take the pointer of this knowing other zvals wont share it*/
 
 	/* Similar to php_var_serialize_intern's first part, as well as php_add_var_hash, for printing R: (reference) or r:(object) */
 	/* However, it differs from the built in serialize() in that references to objects are preserved when serializing and unserializing? (TODO check, test for backwards compatibility) */
@@ -1164,11 +1164,11 @@ inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *i
 	/* If I do, then more tests fail. */
 	/* is_ref || IS_OBJECT implies it has a unique refcounted struct */
 	if (object && Z_TYPE_P(z) == IS_OBJECT) {
-          key = (zend_uintptr_t) Z_OBJ_HANDLE_P(z); /* expand object handle(uint32_t), cast to 32-bit/64-bit pointer */
+		key = (zend_uintptr_t) Z_OBJ_HANDLE_P(z); /* expand object handle(uint32_t), cast to 32-bit/64-bit pointer */
 	} else if (is_ref) {
 		/* NOTE: PHP removed switched from `zval*` to `zval` for the values stored in HashTables. If an array has two references to the same ZVAL, then those references will have different zvals. We use Z_COUNTED_P(ref), which will be the same iff the references are the same */
-	  	/* IS_REF implies there is a unique reference counting pointer for the reference */
-	  	key = (zend_uintptr_t) Z_COUNTED_P(z);
+		/* IS_REF implies there is a unique reference counting pointer for the reference */
+		key = (zend_uintptr_t) Z_COUNTED_P(z);
 	} else if (Z_TYPE_P(z) == IS_ARRAY) {
 		if (Z_REFCOUNTED_P(z)) {
 			key = (zend_uintptr_t) Z_COUNTED_P(z);
@@ -1179,37 +1179,39 @@ inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *i
 		/* Nothing else is going to reference this when this is serialized, this isn't ref counted or an object, shouldn't be reached. */
 		/* Increment the reference id for the deserializer, give up. */
 		++igsd->references_id;
-                php_error_docref(NULL TSRMLS_CC, E_NOTICE, "igbinary_serialize_array_ref expected either object or reference (param object=%s), got neither (zend_type=%d)", object ? "true" : "false", (int)Z_TYPE_P(z));
+		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "igbinary_serialize_array_ref expected either object or reference (param object=%s), got neither (zend_type=%d)", object ? "true" : "false", (int)Z_TYPE_P(z));
 		return 1;
 	}
 
-	if (hash_si_ptr_find(&igsd->references, key, i) == 1) {
-		t = igsd->references_id++;
-		/* FIXME hack? If the top-level element was an array, we assume that it can't be a reference when we serialize it, */
-		/* because that's the way it was serialized in php5. */
-		/* Does this work with different forms of recursive arrays? */
-		if (t > 0 || object) {
-			hash_si_ptr_insert(&igsd->references, key, t);  /* TODO: Add a specialization for fixed-length numeric keys? */
-		}
+	/* FIXME hack? If the top-level element was an array, we assume that it can't be a reference when we serialize it, */
+	/* because that's the way it was serialized in php5. */
+	/* Does this work with different forms of recursive arrays? */
+	if (igsd->references_id == 0 && !object) {
+		key = (zend_uintptr_t)&INVALID_KEY;
+	}
+
+	t = hash_si_ptr_find_or_insert(&igsd->references, key, igsd->references_id);
+	if (t == SIZE_MAX) {
+		igsd->references_id++;
 		return 1;
 	} else {
 		enum igbinary_type type;
-		if (*i <= 0xff) {
+		if (t <= 0xff) {
 			type = object ? igbinary_type_objref8 : igbinary_type_ref8;
 			if (igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC) != 0) {
 				return 1;
 			}
 
-			if (igbinary_serialize8(igsd, (uint8_t) *i TSRMLS_CC) != 0) {
+			if (igbinary_serialize8(igsd, (uint8_t) t TSRMLS_CC) != 0) {
 				return 1;
 			}
-		} else if (*i <= 0xffff) {
+		} else if (t <= 0xffff) {
 			type = object ? igbinary_type_objref16 : igbinary_type_ref16;
 			if (igbinary_serialize8(igsd, (uint8_t) type TSRMLS_CC) != 0) {
 				return 1;
 			}
 
-			if (igbinary_serialize16(igsd, (uint16_t) *i TSRMLS_CC) != 0) {
+			if (igbinary_serialize16(igsd, (uint16_t) t TSRMLS_CC) != 0) {
 				return 1;
 			}
 		} else {
@@ -1218,7 +1220,7 @@ inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *i
 				return 1;
 			}
 
-			if (igbinary_serialize32(igsd, (uint32_t) *i TSRMLS_CC) != 0) {
+			if (igbinary_serialize32(igsd, (uint32_t) t TSRMLS_CC) != 0) {
 				return 1;
 			}
 		}

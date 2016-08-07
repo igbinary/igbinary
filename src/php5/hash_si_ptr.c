@@ -26,7 +26,7 @@
 
 /* Function similar to zend_inline_hash_func. This is not identical. */
 inline static uint32_t inline_hash_of_address(zend_uintptr_t ptr) {
-	register uint32_t hash = Z_UL(5381);
+	register uint32_t hash = 5381;
 	/* Note: Hash the least significant bytes first - Those need to influence the final result as much as possible. */
 	hash = ((hash << 5) + hash) + (ptr & 0xff);
 	hash = ((hash << 5) + hash) + ((ptr >> 8) & 0xff);

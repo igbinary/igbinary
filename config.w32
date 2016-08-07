@@ -24,7 +24,7 @@ if (PHP_IGBINARY == "yes") {
      then set it back*/
   if (null != dll.match(/^php5/)) {
     subdir = "src\\php5"
-    php_igbinary_src_files = "igbinary.c hash_si.c"
+    php_igbinary_src_files = "igbinary.c hash_si.c hash_si_ptr.c"
   } else if (null != dll.match(/^php7/)) {
     subdir = "src\\php7";
     php_igbinary_src_files = "igbinary.c hash_si.c hash_si_ptr.c"
