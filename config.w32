@@ -36,5 +36,5 @@ if (PHP_IGBINARY == "yes") {
   configure_module_dirname = old_conf_dir;
   AC_DEFINE('HAVE_IGBINARY', 1, 'Have igbinary support', false);
   ADD_EXTENSION_DEP('igbinary', 'session');
-  PHP_INSTALL_HEADERS('ext/igbinary', 'igbinary.h php_igbinary.h ' + subdir + '\\igbinary.h ' + subdir + '\\php_igbinary.h'));
+  PHP_INSTALL_HEADERS('ext/igbinary', 'igbinary.h php_igbinary.h ' + subdir + '\\igbinary.h ' + subdir + '\\php_igbinary.h');
 }
