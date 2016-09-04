@@ -411,19 +411,27 @@ static int igbinary_finish_wakeup(struct igbinary_unserialize_data* igsd TSRMLS_
 	if (igsd->wakeup_count == 0) { /* nothing to do */
 		return 0;
 	}
-	zval h;
-	zval f;
+	zval fname;
 	size_t i;
-	ZVAL_STRINGL(&f, "__wakeup", sizeof("__wakeup") - 1);
+	ZVAL_STRINGL(&fname, "__wakeup", sizeof("__wakeup") - 1);
 	for (i = 0; i < igsd->wakeup_count; i++) {
-		call_user_function_ex(CG(function_table), &(igsd->wakeup[i]), &f, &h, 0, 0, 1, NULL TSRMLS_CC);
-		zval_ptr_dtor(&h);
+		zval retval;  /* return value of __wakeup */
+		zval *rval = &(igsd->wakeup[i]);
+		if (call_user_function_ex(CG(function_table), rval, &fname, &retval, 0, 0, 1, NULL TSRMLS_CC) == FAILURE || Z_ISUNDEF(retval)) {
+			GC_FLAGS(Z_OBJ_P(rval)) |= IS_OBJ_DESTRUCTOR_CALLED;
+		}
+		zval_ptr_dtor(&retval);
 		if (EG(exception)) {
-			zval_dtor(&f);
+			size_t j;
+			zval_dtor(&fname);
+			/* Don't call __destruct for any of the objects which __wakeup wasn't called on yet, either */
+			for (j = i + 1; j < igsd->wakeup_count; j++) {
+				GC_FLAGS(Z_OBJ(igsd->wakeup[j])) |= IS_OBJ_DESTRUCTOR_CALLED;
+			}
 			return 1;
 		}
 	}
-	zval_dtor(&f);
+	zval_dtor(&fname);
 	return 0;
 }
 
