@@ -4,10 +4,10 @@ igbinary_unserialize should never convert from packed array to hash when referen
 --FILE--
 <?php
 function main() {
-	$result = [];
+	$result = array();
 	// The default hash size is 16. If we start with 0, and aren't careful, the array would begin as a packed array,
 	// and the references would be invalidated when key 50 (>= 16) is added (converted to a hash), causing a segfault.
-	foreach ([0, 50] as $i) {
+	foreach (array(0, 50) as $i) {
 	    $inner = new stdClass();
 	    $inner->a = $i;
 	    $result[0][0][$i] = $inner;
