@@ -2013,6 +2013,13 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 	}
 	if ((flags & WANT_OBJECT) == 0) {
 		array_init_size(z_deref, n);
+		if (n > 0) {
+			/* (From var_unserializer.re): we can't convert from packed to hash during unserialization, because */
+			/*  references to some zvals might be kept in igsd->references (to support references). */
+			/* (This problem crops up when unserializing an array starting with key 0, and large number keys pointing to objects) */
+			/* TODO: Could consider adding packed arrays as a serialization type in the next igbinary format version, for efficiency. */
+			zend_hash_real_init(Z_ARRVAL_P(z_deref), 0);
+		}
 		/* add the new array to the list of unserialized references */
 		if (igsd_append_ref(igsd, z) == SIZE_MAX) {
 			return 1;
