@@ -12,7 +12,9 @@ if (version_compare($ext->getVersion(), '4.0.2', '<')) {
 }
 
 if (PHP_MAJOR_VERSION >= 7) {
-	echo "skip bug in APCU itself, https://github.com/krakjoe/apcu/pull/190";
+	if (version_compare($ext->getVersion(), '5.1.6, '<')) {
+		echo "skip require APCu version 5.1.6 or above";
+	}
 }
 --INI--
 apc.enable_cli=1
@@ -41,12 +43,15 @@ var_dump(apcu_fetch('intval'));
 $o = new stdClass();
 $o->prop = 5;
 $a = [$o, $o];
-printf("%s\n", bin2hex(igbinary_serialize($a)));
 apcu_store('simplearrayval', $a);
-var_dump();
 $unserialized = apcu_fetch('simplearrayval');
 var_dump($unserialized);
-var_dump($unserialized[0] === $unserialized[1]) ? 'SAME' : 'DIFFERENT');
+if ($unserialized[0] === $unserialized[1]) {
+	echo "SAME\n";
+} else {
+	echo "DIFFERENT\n";
+	printf("%s\n", bin2hex(igbinary_serialize($a)));
+}
 unset($o);
 unset($a);
 unset($unserialized);
@@ -57,7 +62,12 @@ $a = [&$o, &$o];
 apcu_store('refarrayval', $a);
 $unserialized = apcu_fetch('refarrayval');
 var_dump($unserialized);
-var_dump($unserialized[0] === $unserialized[1]) ? 'SAME' : 'DIFFERENT');
+if ($unserialized[0] === $unserialized[1]) {
+	echo "SAME\n";
+} else {
+	echo "DIFFERENT\n";
+	printf("%s\n", bin2hex(igbinary_serialize($a)));
+}
 
 --EXPECTF--
 igbinary
@@ -69,12 +79,12 @@ NULL
 int(777)
 array(2) {
   [0]=>
-  object(stdClass)#%d (2) {
+  object(stdClass)#%d (1) {
     ["prop"]=>
     int(5)
   }
   [1]=>
-  object(stdClass)#%d (2) {
+  object(stdClass)#%d (1) {
     ["prop"]=>
     int(5)
   }
@@ -86,6 +96,7 @@ array(2) {
     ["prop"]=>
     int(6)
   }
+  [1]=>
   &object(stdClass)#%d (1) {
     ["prop"]=>
     int(6)
