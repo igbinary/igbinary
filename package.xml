@@ -151,7 +151,7 @@
  <extsrcrelease />
  <changelog>
   <release>
-   <date>2016-07-29</date>
+   <date>2016-10-26</date>
    <time>23:00:00</time>
    <version>
     <release>1.3.0a1</release>
@@ -163,7 +163,12 @@
    </stability>
    <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">New BSD</license>
    <notes>
-- Compatible with PHP 5.2 - 7.0 (Adds php 7 support)
+- Compatible with PHP 5.2 - 7.0 (Adds PHP 7 support)
+- Serialization format is unchanged
+- Performance improvements for serialization and unserialization in PHP 5.2 - 7.0
+- (PHP 7) Don't call __destruct if __wakeup threw an exception (or __wakeup wasn't called yet)
+- Ports integration with other extensions to PHP 7.0 (session serialization, Memcached, Redis, APCu, etc.)
+- Fixes Windows PECL builds
    </notes>
   </release>
   <release>
