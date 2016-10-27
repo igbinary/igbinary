@@ -3,6 +3,7 @@ APCu serializer registration - more data types
 --INI--
 apc.enable_cli=1
 apc.serializer=igbinary
+extension=apcu.so
 --SKIPIF--
 <?php
 if (!extension_loaded('apcu')) {

@@ -14,6 +14,7 @@ if (version_compare($ext->getVersion(), '4.0.2', '<')) {
 --INI--
 apc.enable_cli=1
 apc.serializer=igbinary
+extension=apcu.so
 --FILE--
 <?php
 echo ini_get('apc.serializer'), "\n";
