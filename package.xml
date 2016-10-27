@@ -135,6 +135,7 @@
     <file name="igbinary_058.phpt" role="test" />
     <file name="igbinary_058b.phpt" role="test" />
     <file name="igbinary_059.phpt" role="test" />
+    <file name="igbinary_060.phpt" role="test" />
     <file name="igbinary_bug54662.phpt" role="test" />
     <file name="igbinary_bug72134.phpt" role="test" />
     <file name="igbinary_unserialize_v1_compatible.phpt" role="test" />
@@ -173,6 +174,7 @@
 - (PHP 7) Don't call __destruct if __wakeup threw an exception (or __wakeup wasn't called yet)
 - Ports integration with other extensions to PHP 7.0 (session serialization, Memcached, Redis, APCu, etc.)
 - Fixes Windows PECL builds
+- Reword warnings for invalid header bytes of serialized data (in igbinary_unserialize).
    </notes>
   </release>
   <release>

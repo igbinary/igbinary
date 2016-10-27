@@ -47,6 +47,7 @@
 #include "igbinary.h"
 
 #include <assert.h>
+#include <ctype.h>
 
 #ifndef PHP_WIN32
 # include <inttypes.h>
@@ -1609,12 +1610,42 @@ inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_
 	return;
 }
 /* }}} */
+/* {{{ igbinary_unserialize_header_emit_warning */
+/* Precondition: igsd->buffer_size >= 4 */
+inline static void igbinary_unserialize_header_emit_warning(struct igbinary_unserialize_data *igsd, int version) {
+	int i;
+	char buf[9], *it;
+	for (i = 0; i < 4; i++) {
+		if (!isprint((int)igsd->buffer[i])) {
+			if (version != 0 && (version & 0xff000000) == version) {
+				// Check if high order byte was somehow set instead of low order byte
+				zend_error(E_WARNING, "igbinary_unserialize_header: unsupported version: %u, should be %u or %u (wrong endianness?)", (unsigned int) version, 0x00000001, (unsigned int) IGBINARY_FORMAT_VERSION);
+				return;
+			}
+			// Binary data, or a version number from a future release.
+			zend_error(E_WARNING, "igbinary_unserialize_header: unsupported version: %u, should be %u or %u", (unsigned int) version, 0x00000001, (unsigned int) IGBINARY_FORMAT_VERSION);
+			return;
+		}
+	}
+
+	for (it = buf, i = 0; i < 4; i++) {
+		char c = igsd->buffer[i];
+		if (c == '"' || c == '\\') {
+			*it++ = '\\';
+		}
+		*it++ = c;
+	}
+	*it = '\0';
+	zend_error(E_WARNING, "igbinary_unserialize_header: unsupported version: \"%s\"..., should begin with a binary version header of \"\\x00\\x00\\x00\\x01\" or \"\\x00\\x00\\x00\\x%02x\"", buf, (int)IGBINARY_FORMAT_VERSION);
+}
+/* }}} */
 /* {{{ igbinary_unserialize_header */
 /** Unserialize header. Check for version. */
 inline static int igbinary_unserialize_header(struct igbinary_unserialize_data *igsd TSRMLS_DC) {
 	uint32_t version;
 
 	if (igsd->buffer_offset + 4 >= igsd->buffer_size) {
+		zend_error(E_WARNING, "igbinary_unserialize_header: expected at least 5 bytes of data, got %u byte(s)", (unsigned int) igsd->buffer_size);
 		return 1;
 	}
 
@@ -1624,7 +1655,7 @@ inline static int igbinary_unserialize_header(struct igbinary_unserialize_data *
 	if (version == IGBINARY_FORMAT_VERSION || version == 0x00000001) {
 		return 0;
 	} else {
-		zend_error(E_WARNING, "igbinary_unserialize_header: unsupported version: %u, should be %u or %u", (unsigned int) version, 0x00000001, (unsigned int) IGBINARY_FORMAT_VERSION);
+		igbinary_unserialize_header_emit_warning(igsd, version);
 		return 1;
 	}
 }
