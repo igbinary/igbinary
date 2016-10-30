@@ -18,6 +18,7 @@
 #include <assert.h>
 
 #include "hash.h"
+#include "igbinary_macros.h"
 #include "zend.h"
 
 /* {{{ nextpow2 */

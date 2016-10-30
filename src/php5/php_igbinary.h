@@ -11,6 +11,7 @@
 #define PHP_IGBINARY_H
 
 #include "php.h"
+#include "igbinary_macros.h"
 
 /** Module entry of igbinary. */
 extern zend_module_entry igbinary_module_entry;
