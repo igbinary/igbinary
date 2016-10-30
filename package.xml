@@ -117,6 +117,7 @@
     <file name="igbinary_044.phpt" role="test" />
     <file name="igbinary_045.phpt" role="test" />
     <file name="igbinary_045b.phpt" role="test" />
+    <file name="igbinary_045c.phpt" role="test" />
     <file name="igbinary_046.phpt" role="test" />
     <file name="igbinary_046b.phpt" role="test" />
     <file name="igbinary_046c.phpt" role="test" />
