@@ -100,7 +100,7 @@ Similar to the above instructions.
 4. Extract or clone the extension source code to the pecl directory
 
    - if cloning, clone to a subdirectory, e.g. C:\php-sdk\phpdev\vc11\x86\pecl\igbinary
-   - source code archive should already contain a subdirectory named e.g. igbinary-1.3.0. That should be renamed to igbinary.
+   - source code archive should already contain a subdirectory named e.g. igbinary-2.0.0. That should be renamed to igbinary.
 5. Open a command prompt, run the setvars script, and enter your PHP source directory (not the extension directory)
 6. Rebuild the configure script by running:
 
