@@ -1,0 +1,59 @@
+# Based on php-ds's appveyor config.
+# This tests against the latest stable minor version of PHP 7 (Currently 7.0)
+
+version: '{branch}.{build}'
+install:
+- cmd: choco feature enable -n=allowGlobalConfirmation
+- cmd: cinst wget
+- cmd: mkdir C:\projects\igbinary\bin
+build_script:
+- cmd: >-
+    "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\vcvars32.bat"
+
+    wget http://windows.php.net/downloads/php-sdk/php-sdk-binary-tools-20110915.zip
+
+    7z x -y php-sdk-binary-tools-20110915.zip -oC:\projects\php-sdk
+
+    C:\projects\php-sdk\bin\phpsdk_setvars.bat
+
+    git clone --depth=1 --branch=PHP-7.0 https://github.com/php/php-src C:\projects\php-src
+
+    mkdir C:\projects\php-src\ext\igbinary
+
+    xcopy C:\projects\igbinary C:\projects\php-src\ext\igbinary /s /e /y
+
+    wget http://windows.php.net/downloads/php-sdk/deps-7.0-vc14-x86.7z
+
+    7z x -y deps-7.0-vc14-x86.7z -oC:\projects\php-src
+
+    cd C:\projects\php-src
+
+    buildconf.bat
+
+    configure.bat --disable-all --enable-session --enable-cli --enable-cgi --enable-igbinary --enable-json --with-config-file-scan-dir=C:\projects\extension\bin\modules.d --with-prefix=C:\projects\igbinary\bin --with-php-build=deps
+
+    nmake
+
+
+test_script:
+- cmd: cd C:\projects\php-src
+- cmd: nmake test TESTS=C:\projects\php-src\ext\igbinary\tests
+
+#artifacts:
+#  - path: bin
+#    name: master
+#    type: zip
+
+#TODO: Why is `nmake install` giving the below error for the below installation steps (in install section)
+#> Installing files under C:\projects\igbinary\bin
+#> The system cannot find the file specified.
+#
+#> NMAKE : fatal error U1077: 'copy' : return code '0x1'
+#> Stop.
+#> Command exited with code 2
+#> nmake install
+
+# mkdir C:\projects\igbinary\bin\modules.d
+
+# echo extension=igbinary.dll > C:\projects\igbinary\bin\modules.d\php.ini
+
