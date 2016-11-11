@@ -38,6 +38,8 @@ build_script:
 
 test_script:
 - cmd: cd C:\projects\php-src
+- cmd: set NO_INTERACTION=1
+- cmd: set REPORT_EXIT_STATUS=1
 - cmd: nmake test TESTS=C:\projects\php-src\ext\igbinary\tests
 
 #artifacts:
