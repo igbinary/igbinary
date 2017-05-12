@@ -38,6 +38,12 @@ if (PHP_IGBINARY == "yes") {
   }
   configure_module_dirname = configure_module_dirname + "\\" + subdir;
   EXTENSION("igbinary", php_igbinary_src_files);
+  /* needed for PHP_REDIS_IGBINARY, copied from propro config.w32 */
+  var PHP_IGBINARY_HEADERS=glob(configure_module_dirname + "/*.h");
+  for (var i=0; i<PHP_IGBINARY_HEADERS.length; ++i) {
+    var basename = FSO.GetFileName(PHP_IGBINARY_HEADERS[i]);
+    copy_and_subst(configure_module_dirname + "/" + basename, old_conf_dir + "/" + basename, []);
+  }
   configure_module_dirname = old_conf_dir;
   AC_DEFINE('HAVE_IGBINARY', 1, 'Have igbinary support', false);
   ADD_EXTENSION_DEP('igbinary', 'session');
