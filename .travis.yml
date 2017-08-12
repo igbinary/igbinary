@@ -1,9 +1,9 @@
 language: php
 
-# When updating 7.2.0X, update the download URL in ci/install_php_custom.sh as well,
-# so that 32-bit testing will work.
+# TODO: Periodically update the download URL for 7.2.0 betas and RCs in ci/install_php_custom.sh as well,
+# so that 32-bit testing will work the same way.
 php:
-  - 7.2.0alpha2
+  - 7.2
   - 7.1
   - 7.0
   - 5.6
