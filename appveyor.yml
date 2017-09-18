@@ -1,5 +1,5 @@
 # Based on php-ds's appveyor config.
-# This tests against the latest stable minor version of PHP 7 (Currently 7.0)
+# This tests against the latest stable minor version of PHP 7 (Currently 7.1)
 # The project name is the same as the build id used, e.g. https://www.appveyor.com/docs/environment-variables/
 
 version: '{branch}.{build}'
