@@ -50,10 +50,6 @@ matrix:
     env: CC=clang   CFLAGS="-O3" SKIP_VALGRIND=1
   - php: nightly
     env: CC=clang   CFLAGS="-g -O0"
-  - php: nightly
-    env: CC=gcc CFLAGS=""
-  - php: nightly
-    env: CC=gcc CXX=g++ USE_32BIT=1 PHP_CUSTOM=maintainer-zts PHP_CONFIGURE_ARGS='--disable-all --enable-maintainer-zts --enable-debug --enable-cgi --enable-session --enable-json'
 
 cache:
   directories:
