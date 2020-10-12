@@ -1,3 +1,11 @@
+3.1.7dev 202?-??-??
+=======
+
+* Use PHP's shared empty array instance when unserializing empty arrays in php 7.3+.
+  (helps slightly with memory usage when repeatedly unserializing,
+  when removing elements from arrays before unserializing them,
+  or when serializing values including an empty array that was unserialized)
+
 3.1.6 2020-10-08
 =======
 

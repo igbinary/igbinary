@@ -1,16 +1,16 @@
 <?php
 
-// Description: Unserialize large array of arrays
+// Description: Unserialize very large array of arrays
 
 require_once 'bench.php';
 
-$b = new Bench('unserialize-arrayarray');
+$b = new Bench('unserialize-largearrayarray');
 
 srand(13333);
 $data = [];
 for ($i = 0; $i < 1000; $i++) {
     $part = [];
-    for ($j = 0; $j < rand() % 20; $j++) {
+    for ($j = 0, $n = rand() % 100; $j < $n; $j++) {
         $part[] = rand() % 300;
     }
     $data[] = $part;

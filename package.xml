@@ -34,8 +34,8 @@
  <date>2020-10-08</date>
  <time>16:00:00</time>
  <version>
-  <release>3.1.6</release>
-  <api>1.2.4</api>
+  <release>3.1.7dev</release>
+  <api>1.2.5</api>
  </version>
  <stability>
   <release>stable</release>
@@ -43,8 +43,7 @@
  </stability>
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
  <notes>
-* Fix build failure with older C standard (e.g. building on CentOS 6).
-* Otherwise, identical to 3.1.6RC1.
+* Improve memory efficiency when unserializing packed arrays (e.g. lists) - certain checks are no longer needed.
  </notes>
  <contents>
   <dir name="/">
@@ -208,6 +207,23 @@
  <providesextension>igbinary</providesextension>
  <extsrcrelease />
  <changelog>
+  <release>
+   <date>2020-10-08</date>
+   <time>16:00:00</time>
+   <version>
+    <release>3.1.6</release>
+    <api>1.2.4</api>
+   </version>
+   <stability>
+    <release>beta</release>
+    <api>stable</api>
+   </stability>
+   <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
+   <notes>
+* Fix build failure with older C standard (e.g. building on CentOS 6).
+* Otherwise, identical to 3.1.6RC1.
+   </notes>
+  </release>
   <release>
    <date>2020-10-07</date>
    <time>16:00:00</time>

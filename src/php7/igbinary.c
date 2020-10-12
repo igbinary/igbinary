@@ -158,9 +158,12 @@ Object {
 }
 */
 enum zval_ref_type {
-	IG_REF_IS_REFERENCE,  // Points to zend_reference
-	IG_REF_IS_OBJECT,  // Points to zend_object
-	IG_REF_IS_ARRAY,  // Points to zend_object
+	IG_REF_IS_REFERENCE,   // Points to zend_reference
+	IG_REF_IS_OBJECT,      // Points to zend_object
+	IG_REF_IS_ARRAY,       // Points to zend_array
+#if PHP_VERSION_ID >= 70300
+	IG_REF_IS_EMPTY_ARRAY, // Points to zend_object
+#endif
 };
 
 struct igbinary_value_ref {
@@ -193,26 +196,22 @@ struct deferred_call {
  * @author Oleg Grenrus <oleg.grenrus@dynamoid.com>
  */
 struct igbinary_unserialize_data {
-	const uint8_t *buffer;			/**< Buffer. */
-	const uint8_t *buffer_end;		/**< Buffer size. */
-	const uint8_t *buffer_ptr;		/**< Current read offset. */
+	const uint8_t *buffer;          /**< Buffer with bytes to unserialize. */
+	const uint8_t *buffer_end;      /**< Buffer size. */
+	const uint8_t *buffer_ptr;      /**< Current read offset. */
 
 	zend_string **strings;          /**< Unserialized strings. */
-	size_t strings_count;			/**< Unserialized string count. */
-	size_t strings_capacity;		/**< Unserialized string array capacity. */
+	size_t strings_count;           /**< Unserialized string count. */
+	size_t strings_capacity;        /**< Unserialized string array capacity. */
 
 	struct igbinary_value_ref *references; /**< Unserialized Arrays/Objects/References */
-	size_t references_count;		/**< Unserialized array/objects count. */
-	size_t references_capacity;		/**< Unserialized array/object array capacity. */
+	size_t references_count;        /**< Unserialized array/objects count. */
+	size_t references_capacity;     /**< Unserialized array/object array capacity. */
 
-	struct deferred_call *deferred;        /**< objects&data for calls to __unserialize/__wakeup */
-	size_t deferred_count;			/**< count of objects in array for calls to __unserialize/__wakeup */
-	size_t deferred_capacity;		/**< capacity of objects in array for calls to __unserialize/__wakeup */
+	struct deferred_call *deferred; /**< objects&data for calls to __unserialize/__wakeup */
+	size_t deferred_count;          /**< count of objects in array for calls to __unserialize/__wakeup */
+	size_t deferred_capacity;       /**< capacity of objects in array for calls to __unserialize/__wakeup */
 	zend_bool deferred_finished;    /**< whether the deferred calls were performed */
-
-	int error;						/**< Error number. Not used. */
-	smart_string string0_buf;			/**< Temporary buffer for strings */
-	// TODO HashTable *ref_props;           /** For php 7.4 typed properties
 };
 
 #define IGB_REF_VAL_2(igsd, n)	((igsd)->references[(n)])
@@ -1246,7 +1245,7 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 		--n;
 	}
 
-    ZEND_ASSERT(!object || !serialize_props);
+	ZEND_ASSERT(!object || !serialize_props);
 	/* if it is an array or a reference to an array, then add a reference unique to that **reference** to that array */
 	if (serialize_props && igbinary_serialize_array_ref(igsd, z_original, false) == 0) {
 		return 0;
@@ -1877,8 +1876,6 @@ static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z
 /* {{{ igbinary_unserialize_data_init */
 /** Inits igbinary_unserialize_data. */
 inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_data *igsd) {
-	smart_string empty_str = {0, 0, 0};
-
 	igsd->buffer = NULL;
 	igsd->buffer_end = NULL;
 	igsd->buffer_ptr = NULL;
@@ -1886,7 +1883,6 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 	igsd->strings = NULL;
 	igsd->strings_count = 0;
 	igsd->strings_capacity = 4;
-	igsd->string0_buf = empty_str;
 
 	igsd->references = NULL;
 	igsd->references_count = 0;
@@ -1953,8 +1949,6 @@ inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_
 #endif
 		efree(igsd->deferred);
 	}
-
-	smart_string_free(&igsd->string0_buf);
 
 	return;
 }
@@ -2282,21 +2276,37 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		}
 		n = igbinary_unserialize8(igsd);
 		if (n == 0) {
-			array_init_size(z, 0);
 			if (create_ref) {
+				/* NOTE: igbinary uses ZVAL_ARR() when reading the created reference, which assumes that the original array is refcounted. */
+				/* This would have to be fixed to switch to ZVAL_EMPTY_ARRAY for the empty array (there's probably not benefit to making that switch). */
+				/* Otherwise, using ZVAL_EMPTY_ARRAY would segfault. */
+#if PHP_VERSION_ID >= 70300
+				ZVAL_EMPTY_ARRAY(z);
+#else
+				array_init_size(z, 0);
+#endif
 				struct igbinary_value_ref ref;
-				/* TODO: Is it safe or more efficient to use php 7.3's ZVAL_EMPTY_ARRAY for the empty array? */
-				/* Without more work, it will segfault right now */
 				if (flags & WANT_REF) {
 					ZVAL_NEW_REF(z, z);
 					ref.reference.reference = Z_REF_P(z);
 					ref.type = IG_REF_IS_REFERENCE;
 				} else {
+#if PHP_VERSION_ID >= 70300
+					ref.type = IG_REF_IS_EMPTY_ARRAY;
+#else
 					ref.reference.array = Z_ARR_P(z);
 					ref.type = IG_REF_IS_ARRAY;
+#endif
 				}
 				/* add the new array to the list of unserialized references */
 				RETURN_1_IF_NON_ZERO(igsd_append_ref(igsd, ref) == SIZE_MAX);
+			} else {
+				/* This only matters if __unserialize() would get called with an empty array */
+#if PHP_VERSION_ID >= 70300
+				ZVAL_EMPTY_ARRAY(z);
+#else
+				array_init_size(z, 0);
+#endif
 			}
 			return 0;
 		}
@@ -2985,6 +2995,15 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 			ref_ptr->reference.reference = Z_REF_P(z);
 			ref_ptr->type = IG_REF_IS_REFERENCE;
 			break;
+#if PHP_VERSION_ID >= 70300
+		case IG_REF_IS_EMPTY_ARRAY:
+			ZVAL_EMPTY_ARRAY(z);
+			ZVAL_MAKE_REF(z); /* Convert original zval data to a reference */
+			/* replace the entry in IGB_REF_VAL with a reference. */
+			ref_ptr->reference.reference = Z_REF_P(z);
+			ref_ptr->type = IG_REF_IS_REFERENCE;
+			break;
+#endif
 		case IG_REF_IS_REFERENCE:
 			// This is already a reference, convert into reference count.
 			ZVAL_REF(z, ref.reference.reference);
@@ -3001,6 +3020,11 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 			ZVAL_ARR(z, ref.reference.array);
 			Z_TRY_ADDREF_P(z);
 			break;
+#if PHP_VERSION_ID >= 70300
+		case IG_REF_IS_EMPTY_ARRAY:
+			ZVAL_EMPTY_ARRAY(z);
+			break;
+#endif
 		case IG_REF_IS_REFERENCE:
 			ZVAL_COPY(z, &(ref.reference.reference->val));
 			break;
