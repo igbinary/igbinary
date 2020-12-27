@@ -2283,7 +2283,7 @@ inline static zend_string *igbinary_unserialize_chararray(struct igbinary_unseri
 		igsd->strings = new_strings;
 	}
 
-	zstr = zend_string_init((const char *)(igsd->buffer + IGB_BUFFER_OFFSET(igsd)), l, 0);
+	zstr = zend_string_init((const char*)igsd->buffer_ptr, l, 0);
 
 	igsd->buffer_ptr += l;
 
