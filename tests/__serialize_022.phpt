@@ -1,5 +1,5 @@
 --TEST--
-__serialize() mechanism (021): Test __unserialize without __serialize
+__serialize() mechanism (021): Test __serialize without __unserialize
 --SKIPIF--
 <?php if (PHP_VERSION_ID < 70400) { echo "skip __serialize/__unserialize not supported in php < 7.4 for compatibility with serialize()"; } ?>
 --FILE--
