@@ -1,3 +1,8 @@
+3.2.2-dev 202?-??-??
+=======
+
+* Fix bug in error handling in __sleep, slightly speed up serializing with __sleep.
+
 3.2.1 2020-12-27
 =======
 * Fix crash when unserializing if __serialize was defined but __unserialize was undefined in php 8.0+ (due to typo).

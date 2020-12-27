@@ -34,7 +34,7 @@
  <date>2020-12-27</date>
  <time>16:00:00</time>
  <version>
-  <release>3.2.1</release>
+  <release>3.2.2dev</release>
   <api>1.2.5</api>
  </version>
  <stability>
@@ -43,7 +43,7 @@
  </stability>
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
  <notes>
-* Fix crash when unserializing if __serialize was defined but __unserialize was undefined in php 8.0+ (due to typo).
+* Fix bug in error handling in __sleep, slightly speed up serializing with __sleep.
  </notes>
  <contents>
   <dir name="/">
@@ -213,6 +213,22 @@
  <extsrcrelease />
  <changelog>
   <release>
+   <date>2020-12-27</date>
+   <time>16:00:00</time>
+   <version>
+    <release>3.2.1</release>
+    <api>1.2.5</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
+   <notes>
+* Fix crash when unserializing if __serialize was defined but __unserialize was undefined in php 8.0+ (due to typo).
+   </notes>
+  </release>
+  <release>
    <date>2020-12-26</date>
    <time>16:00:00</time>
    <version>
@@ -220,7 +236,7 @@
     <api>1.2.5</api>
    </version>
    <stability>
-    <release>beta</release>
+    <release>stable</release>
     <api>stable</api>
    </stability>
    <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
@@ -246,7 +262,7 @@
     <api>1.2.4</api>
    </version>
    <stability>
-    <release>beta</release>
+    <release>stable</release>
     <api>stable</api>
    </stability>
    <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
