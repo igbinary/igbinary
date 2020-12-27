@@ -33,6 +33,10 @@
 #define zend_release_properties(ht) do {} while (0)
 #endif
 
+#if PHP_VERSION_ID < 70300
+#define zend_string_efree(s) zend_string_release((s))
+#define GC_ADDREF(p) (++GC_REFCOUNT((p)))
+#endif
 
 #if defined(HAVE_APCU_SUPPORT)
 # include "ext/apcu/apc_serializer.h"
