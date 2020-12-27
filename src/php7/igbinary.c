@@ -154,7 +154,6 @@ struct igbinary_serialize_data {
 	struct hash_si_ptr references; /**< Hash of already serialized potential references. (non-NULL uintptr_t => int32_t) */
 	int references_id;             /**< Number of things that the unserializer might think are references. >= length of references */
 	int string_count;              /**< Serialized string count, used for back referencing */
-	struct igbinary_memory_manager mm; /**< Memory management functions. */
 
 	struct deferred_dtor_tracker deferred_dtor_tracker;  /**< refcounted objects and arrays to call dtor on after serializing. See i_zval_ptr_dtor */
 };
@@ -235,16 +234,11 @@ struct igbinary_unserialize_data {
 #define WANT_REF   (1 << 1)
 
 /* }}} */
-/* {{{ Memory allocator wrapper prototypes */
-static inline void *igbinary_mm_wrapper_malloc(size_t size, void *context);
-static inline void *igbinary_mm_wrapper_realloc(void *ptr, size_t size, void *context);
-static inline void igbinary_mm_wrapper_free(void *ptr, void *context);
-/* }}} */
 /* {{{ Serializing functions prototypes */
-inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar, struct igbinary_memory_manager *memory_manager);
+inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar);
 inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd, int free_buffer);
 
-inline static int igbinary_serialize_header(struct igbinary_serialize_data *igsd);
+inline static void igbinary_serialize_header(struct igbinary_serialize_data *igsd);
 
 inline static int igbinary_serialize8(struct igbinary_serialize_data *igsd, uint8_t i);
 inline static int igbinary_serialize16(struct igbinary_serialize_data *igsd, uint16_t i);
@@ -650,26 +644,6 @@ static inline int igsd_defer_dtor(struct deferred_dtor_tracker *tracker, zval *z
 	return 0;
 }
 /* }}} */
-
-/* {{{ Memory allocator wrappers */
-static inline void *igbinary_mm_wrapper_malloc(size_t size, void *context)
-{
-	(void)context;
-	return emalloc(size);
-}
-
-static inline void *igbinary_mm_wrapper_realloc(void *ptr, size_t size, void *context)
-{
-	(void)context;
-	return erealloc(ptr, size);
-}
-
-static inline void igbinary_mm_wrapper_free(void *ptr, void *context)
-{
-	(void)context;
-	efree(ptr);
-}
-/* }}} */
 /* {{{ int igbinary_serialize(uint8_t**, size_t*, zval*) */
 IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z) {
 	return igbinary_serialize_ex(ret, ret_len, z, NULL);
@@ -694,16 +668,12 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 	}
 	ZVAL_DEREF(z);
 
-	if (UNEXPECTED(igbinary_serialize_data_init(&igsd, Z_TYPE_P(z) != IS_OBJECT && Z_TYPE_P(z) != IS_ARRAY, memory_manager))) {
+	if (UNEXPECTED(igbinary_serialize_data_init(&igsd, Z_TYPE_P(z) != IS_OBJECT && Z_TYPE_P(z) != IS_ARRAY))) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
 		return 1;
 	}
 
-	if (UNEXPECTED(igbinary_serialize_header(&igsd) != 0)) {
-		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
-		igbinary_serialize_data_deinit(&igsd, 1);
-		return 1;
-	}
+	igbinary_serialize_header(&igsd);
 
 	if (UNEXPECTED(igbinary_serialize_zval(&igsd, z) != 0)) {
 		igbinary_serialize_data_deinit(&igsd, 1);
@@ -711,22 +681,33 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 	}
 
 	/* Explicit null termination */
+	/* TODO: Stop doing this in the next major version, serialized data can contain nulls in the middle and callers should check length  */
 	if (UNEXPECTED(igbinary_serialize8(&igsd, 0) != 0)) {
 		igbinary_serialize_data_deinit(&igsd, 1);
 		return 1;
 	}
 
 	/* shrink buffer to the real length, ignore errors */
-	tmpbuf = (uint8_t *)igsd.mm.realloc(igsd.buffer, igsd.buffer_size, igsd.mm.context);
-	if (tmpbuf != NULL) {
-		igsd.buffer = tmpbuf;
+	if (memory_manager) {
+		tmpbuf = memory_manager->alloc(igsd.buffer_size, memory_manager->context);
+		if (tmpbuf != NULL) {
+			memcpy(tmpbuf, igsd.buffer, igsd.buffer_size);
+		}
+		/* Unconditionally free the emalloc()ed data */
+		igbinary_serialize_data_deinit(&igsd, 1);
+
+		if (tmpbuf == NULL) {
+			return 1;
+		}
+		*ret = tmpbuf;
+		*ret_len = igsd.buffer_size - 1;
+	} else {
+		/* Set return values */
+		*ret_len = igsd.buffer_size - 1;
+		*ret = igsd.buffer;
+
+		igbinary_serialize_data_deinit(&igsd, 0);
 	}
-
-	/* Set return values */
-	*ret_len = igsd.buffer_size - 1;
-	*ret = igsd.buffer;
-
-	igbinary_serialize_data_deinit(&igsd, 0);
 
 	return 0;
 }
@@ -838,16 +819,12 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	if (Z_ISREF_P(session_vars)) {
 		session_vars = Z_REFVAL_P(session_vars);
 	}
-	if (igbinary_serialize_data_init(&igsd, false, NULL)) {
+	if (igbinary_serialize_data_init(&igsd, false)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
 		return ZSTR_EMPTY_ALLOC();
 	}
 
-	if (igbinary_serialize_header(&igsd) != 0) {
-		zend_error(E_WARNING, "igbinary_serialize: cannot write header");
-		igbinary_serialize_data_deinit(&igsd, 1);
-		return ZSTR_EMPTY_ALLOC();
-	}
+	igbinary_serialize_header(&igsd);
 
 	/** We serialize the passed in array of session_var (including the empty array, for #231) */
 	/** the same way we would serialize a regular array. */
@@ -859,7 +836,7 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	}
 
 	/* Copy the buffer to a new zend_string */
-	/* TODO: Clean up igsd->mm, and make this a pointer swap instead? It's only used for building up the serialization data buffer. */
+	/* TODO: Track a zend_string instead to avoid the extra copy? */
 	result = zend_string_init((const char *)igsd.buffer, igsd.buffer_size, 0);
 	igbinary_serialize_data_deinit(&igsd, 1);
 
@@ -916,7 +893,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 
 	igbinary_unserialize_data_deinit(&igsd);
 
-	/* TODO: Validate that this is of the correct data type */
+	/* Validate that this is of the correct data type */
 	tmp_hash = HASH_OF(&z);
 	if (tmp_hash == NULL) {
 		zval_ptr_dtor(&z);
@@ -978,24 +955,15 @@ static int APC_UNSERIALIZER_NAME(igbinary) ( APC_UNSERIALIZER_ARGS ) {
  * @param scalar true if the data being serialized is a scalar
  * @param memory_manager optional override of the memory manager
  */
-inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar, struct igbinary_memory_manager *memory_manager) {
+inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar) {
 	int r = 0;
-
-	if (memory_manager == NULL) {
-		igsd->mm.alloc = igbinary_mm_wrapper_malloc;
-		igsd->mm.realloc = igbinary_mm_wrapper_realloc;
-		igsd->mm.free = igbinary_mm_wrapper_free;
-		igsd->mm.context = NULL;
-	} else {
-		igsd->mm = *memory_manager;
-	}
 
 	igsd->buffer = NULL;
 	igsd->buffer_size = 0;
 	igsd->buffer_capacity = 32;
 	igsd->string_count = 0;
 
-	igsd->buffer = (uint8_t *)igsd->mm.alloc(igsd->buffer_capacity, igsd->mm.context);
+	igsd->buffer = emalloc(igsd->buffer_capacity);
 	if (UNEXPECTED(igsd->buffer == NULL)) {
 		return 1;
 	}
@@ -1020,7 +988,7 @@ inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *i
 /** Deinits igbinary_serialize_data, freeing the allocated data structures. */
 inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd, int free_buffer) {
 	if (free_buffer && igsd->buffer) {
-		igsd->mm.free(igsd->buffer, igsd->mm.context);
+		efree(igsd->buffer);
 	}
 
 	if (!igsd->scalar) {
@@ -1032,8 +1000,15 @@ inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data
 /* }}} */
 /* {{{ igbinary_serialize_header */
 /** Serializes header ("\x00\x00\x00\x02"). */
-inline static int igbinary_serialize_header(struct igbinary_serialize_data *igsd) {
-	return igbinary_serialize32(igsd, IGBINARY_FORMAT_VERSION); /* version */
+inline static void igbinary_serialize_header(struct igbinary_serialize_data *igsd) {
+	uint8_t* append_buffer = igsd->buffer;
+	ZEND_ASSERT(igsd->buffer_size == 0);
+	ZEND_ASSERT(igsd->buffer_capacity >= 4);
+	append_buffer[0] = 0;
+	append_buffer[1] = 0;
+	append_buffer[2] = 0;
+	append_buffer[3] = IGBINARY_FORMAT_VERSION;
+	igsd->buffer_size = 4;
 }
 /* }}} */
 static int igbinary_raise_capacity(struct igbinary_serialize_data *igsd, size_t size) {
@@ -1042,10 +1017,10 @@ static int igbinary_raise_capacity(struct igbinary_serialize_data *igsd, size_t 
 	} while (igsd->buffer_size + size >= igsd->buffer_capacity);
 
 	uint8_t *const old_buffer = igsd->buffer;
-	igsd->buffer = (uint8_t *)igsd->mm.realloc(old_buffer, igsd->buffer_capacity, igsd->mm.context);
+	igsd->buffer = erealloc(old_buffer, igsd->buffer_capacity);
 	if (UNEXPECTED(igsd->buffer == NULL)) {
 		/* We failed to allocate a larger buffer for the result. Free the memory used for the original buffer. */
-		igsd->mm.free(old_buffer, igsd->mm.context);
+		efree(old_buffer);
 		return 1;
 	}
 
@@ -1650,7 +1625,6 @@ inline static int igbinary_serialize_object_standard_serializer(struct igbinary_
 	if (ce->serialize(z, &serialized_data, &serialized_len, (zend_serialize_data *)NULL) == SUCCESS && !EG(exception)) {
 		if (igbinary_serialize_object_name(igsd, ce->name) != 0) {
 			if (serialized_data) {
-				/* These use efree instead of igsd->mm.free because they were allocated with emalloc */
 				efree(serialized_data);
 			}
 			return 1;
@@ -1951,13 +1925,13 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 
 	igsd->strings = (zend_string **)emalloc(sizeof(zend_string *) * igsd->strings_capacity);
 	if (igsd->strings == NULL) {
-		/* We failed to allocate memory for references. Fail and free everything we allocated */
+		/* We failed to allocate memory for strings. Fail and free everything we allocated */
 		efree(igsd->references);
 		igsd->references = NULL;
 		return 1;
 	}
 
-	/** Don't bother allocating zvals which __wakeup, probably not common */
+	/** Don't bother allocating zvals which __wakeup or __unserialize, probably not common */
 	igsd->deferred = NULL;
 	igsd->deferred_count = 0;
 	igsd->deferred_capacity = 0;
@@ -1980,7 +1954,7 @@ inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_
 #if ZEND_DEBUG
 			ZEND_ASSERT(GC_REFCOUNT(s) >= 1);
 #endif
-			zend_string_release(s);
+			zend_string_release_ex(s, 0); /* Should only create interned or non-persistent strings when unserializing */
 		}
 
 		efree(igsd->strings);
