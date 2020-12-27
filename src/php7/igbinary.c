@@ -186,15 +186,15 @@ struct igbinary_value_ref {
 };
 
 struct deferred_unserialize_call {
-	zval param;          /* The array parameter passed to the call */
-	zend_object *object; /* The object which has a deferred call to __unserialize is getting called on. */
+	zval param;          /* The array parameter passed to the __unserialize call */
+	zend_object *object; /* The object which has a deferred call to __unserialize that is going to get called. */
 };
 
 struct deferred_call {
 	union {
 		zend_object *wakeup;
 #if PHP_VERSION_ID >= 70400
-		/* Here, this uses a pointer instead of a value in case it matters for zval handling */
+		/* Currently, zvals are safe to relocate */
 		struct deferred_unserialize_call unserialize;
 #endif
 	} data;
@@ -836,7 +836,6 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	}
 
 	/* Copy the buffer to a new zend_string */
-	/* TODO: Track a zend_string instead to avoid the extra copy? */
 	result = zend_string_init((const char *)igsd.buffer, igsd.buffer_size, 0);
 	igbinary_serialize_data_deinit(&igsd, 1);
 
@@ -2007,7 +2006,7 @@ inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_
 /**
  * Warns about invalid byte headers
  * Precondition: igsd->buffer_size >= 4 */
-inline static void igbinary_unserialize_header_emit_warning(struct igbinary_unserialize_data *igsd, int version) {
+static ZEND_COLD void igbinary_unserialize_header_emit_warning(struct igbinary_unserialize_data *igsd, int version) {
 	int i;
 	char buf[9], *it;
 	for (i = 0; i < 4; i++) {
@@ -2224,8 +2223,9 @@ inline static zend_string *igbinary_unserialize_string(struct igbinary_unseriali
 	}
 
 	zstr = igsd->strings[i];
-	// Add one more ref - Callers of this will decrease refs as needed
-	zend_string_addref(zstr);
+	// Add one more ref (currently not using any interned strings) - Callers of this will decrease refs as needed
+	ZEND_ASSERT(!ZSTR_IS_INTERNED(zstr));
+	GC_ADDREF(zstr);
 	return zstr;
 }
 /* }}} */
@@ -2287,10 +2287,7 @@ inline static zend_string *igbinary_unserialize_chararray(struct igbinary_unseri
 
 	igsd->buffer_ptr += l;
 
-	if (zstr == NULL) {
-		return NULL;
-	}
-	zend_string_addref(zstr);
+	GC_ADDREF(zstr); /* definitely not interned. Add a reference in case the first reference gets deleted before reusing the temporary string */
 
 	igsd->strings[igsd->strings_count] = zstr;
 	igsd->strings_count += 1;
@@ -3043,7 +3040,7 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 		switch (ref.type) {
 		case IG_REF_IS_OBJECT:
 			ZVAL_OBJ(z, ref.reference.object);
-			Z_TRY_ADDREF_P(z);
+			Z_ADDREF_P(z);
 			ZVAL_MAKE_REF(z); /* Convert original zval data to a reference */
 			/* replace the entry in IGB_REF_VAL with a reference. */
 			ref_ptr->reference.reference = Z_REF_P(z);
@@ -3051,7 +3048,9 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 			break;
 		case IG_REF_IS_ARRAY:
 			ZVAL_ARR(z, ref.reference.array);
-			Z_TRY_ADDREF_P(z);
+			/* All arrays built by igbinary when unserializing are refcounted, except IG_REF_IS_EMPTY_ARRAY. */
+			/* If they were not refcounted, the ZVAL_ARR call would probably also need to be changed. */
+			Z_ADDREF_P(z);
 			ZVAL_MAKE_REF(z); /* Convert original zval data to a reference */
 			/* replace the entry in IGB_REF_VAL with a reference. */
 			ref_ptr->reference.reference = Z_REF_P(z);
@@ -3076,11 +3075,11 @@ inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igs
 		switch (ref.type) {
 		case IG_REF_IS_OBJECT:
 			ZVAL_OBJ(z, ref.reference.object);
-			Z_TRY_ADDREF_P(z);
+			Z_ADDREF_P(z);
 			break;
 		case IG_REF_IS_ARRAY:
 			ZVAL_ARR(z, ref.reference.array);
-			Z_TRY_ADDREF_P(z);
+			Z_ADDREF_P(z);
 			break;
 #if PHP_VERSION_ID >= 70300
 		case IG_REF_IS_EMPTY_ARRAY:
