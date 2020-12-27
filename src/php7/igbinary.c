@@ -2906,7 +2906,7 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 #if PHP_VERSION_ID >= 70400
 			} else {
 #if PHP_VERSION_ID >= 80000
-				if (ce->__serialize)
+				if (ce->__unserialize)
 #else
 				if (zend_hash_str_exists(&ce->function_table, "__unserialize", sizeof("__unserialize") - 1))
 #endif

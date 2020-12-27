@@ -31,10 +31,10 @@
   <email>tysonandre775@hotmail.com</email>
   <active>yes</active>
  </lead>
- <date>2020-12-26</date>
+ <date>2020-12-27</date>
  <time>16:00:00</time>
  <version>
-  <release>3.2.1dev</release>
+  <release>3.2.1</release>
   <api>1.2.5</api>
  </version>
  <stability>
@@ -43,7 +43,7 @@
  </stability>
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
  <notes>
- - TBD
+* Fix crash when unserializing if __serialize was defined but __unserialize was undefined in php 8.0+ (due to typo).
  </notes>
  <contents>
   <dir name="/">
@@ -95,6 +95,7 @@
     <file name="__serialize_019.phpt" role="test" />
     <file name="__serialize_020.phpt" role="test" />
     <file name="__serialize_021.phpt" role="test" />
+    <file name="__serialize_022.phpt" role="test" />
     <file name="igbinary_001.phpt" role="test" />
     <file name="igbinary_002.phpt" role="test" />
     <file name="igbinary_003.phpt" role="test" />
