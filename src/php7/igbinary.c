@@ -1273,18 +1273,34 @@ inline static int igbinary_serialize_string(struct igbinary_serialize_data *igsd
 /* {{{ igbinary_serialize_chararray */
 /** Serializes string data as the type followed by the length followed by the raw character array. */
 inline static int igbinary_serialize_chararray(struct igbinary_serialize_data *igsd, const char *s, size_t len) {
+	uint8_t *append_buffer;
+	int offset;
 	if (len <= 0xff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, igbinary_type_string8, len));
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_resize(igsd, len + 2));
+		append_buffer = &igsd->buffer[igsd->buffer_size];
+		append_buffer[0] = igbinary_type_string8;
+		append_buffer[1] = len;
+		offset = 2;
 	} else if (len <= 0xffff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_string16, len));
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_resize(igsd, len + 3));
+		append_buffer = &igsd->buffer[igsd->buffer_size];
+		append_buffer[0] = igbinary_type_string16;
+		append_buffer[1] = (uint8_t)(len >> 8 & 0xff);
+		append_buffer[2] = (uint8_t)(len & 0xff);
+		offset = 3;
 	} else {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_string32, len));
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_resize(igsd, len + 5));
+		append_buffer = &igsd->buffer[igsd->buffer_size];
+		append_buffer[0] = igbinary_type_string32;
+		append_buffer[1] = (uint8_t)(len >> 24 & 0xff);
+		append_buffer[2] = (uint8_t)(len >> 16 & 0xff);
+		append_buffer[3] = (uint8_t)(len >> 8 & 0xff);
+		append_buffer[4] = (uint8_t)(len & 0xff);
+		offset = 5;
 	}
 
-	RETURN_1_IF_NON_ZERO(igbinary_serialize_resize(igsd, len));
-
-	memcpy(igsd->buffer + igsd->buffer_size, s, len);
-	igsd->buffer_size += len;
+	memcpy(append_buffer + offset, s, len);
+	igsd->buffer_size += offset + len;
 
 	return 0;
 }
