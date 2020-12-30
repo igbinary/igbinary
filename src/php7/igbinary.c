@@ -302,7 +302,7 @@ inline static zend_string *igbinary_unserialize_chararray(struct igbinary_unseri
 
 inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags, zend_bool create_ref);
 inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags);
-inline static int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce);
+static int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce);
 inline static int igbinary_unserialize_ref(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags);
 
 inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
@@ -1655,8 +1655,8 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 	return 0;
 }
 /* }}} */
-/* igbinary_serialize_object_standard_serializer {{{ */
-inline static int igbinary_serialize_object_standard_serializer(struct igbinary_serialize_data* igsd, zval *z, zend_class_entry *ce) {
+/* igbinary_serialize_object_old_serializer_class {{{ */
+static ZEND_COLD int igbinary_serialize_object_old_serializer_class(struct igbinary_serialize_data* igsd, zval *z, zend_class_entry *ce) {
 	unsigned char *serialized_data = NULL;
 	size_t serialized_len;
 	int r = 0;
@@ -1815,13 +1815,18 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 	/* custom serializer */
 	if (ce) {
 #if PHP_VERSION_ID >= 70400
-		if (zend_hash_str_exists(&ce->function_table, "__serialize", sizeof("__serialize")-1)) {
+#if PHP_VERSION_ID >= 80000
+		if (ce->__serialize)
+#else
+		if (zend_hash_str_exists(&ce->function_table, "__serialize", sizeof("__serialize")-1))
+#endif
+		{
 			// fprintf(stderr, "Going to serialize %s\n", ZSTR_VAL(ce->name));
 			return igbinary_serialize_object_new_serializer(igsd, z, ce);
 		}
 #endif
 		if (ce->serialize != NULL) {
-			return igbinary_serialize_object_standard_serializer(igsd, z, ce);
+			return igbinary_serialize_object_old_serializer_class(igsd, z, ce);
 		}
 	}
 
@@ -2722,7 +2727,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 /* }}} */
 /* {{{ igbinary_unserialize_object_ser */
 /** Unserializes object's property array. This is used to serialize objects implementing Serializable -interface. */
-inline static int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce) {
+static ZEND_COLD int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce) {
 	size_t n;
 	int ret;
 	php_unserialize_data_t var_hash;
