@@ -73,8 +73,28 @@ static int APC_SERIALIZER_NAME(igbinary) (APC_SERIALIZER_ARGS);
 static int APC_UNSERIALIZER_NAME(igbinary) (APC_UNSERIALIZER_ARGS);
 #endif
 
+static inline HashTable *HASH_OF_OBJECT(zval *p) {
+	ZEND_ASSERT(Z_TYPE_P(p) == IS_OBJECT);
+	return Z_OBJ_HT_P(p)->get_properties(
+#if PHP_VERSION_ID >= 80000
+			Z_OBJ_P(p)
+#else
+			p
+#endif
+	);
+}
+
 #if PHP_VERSION_ID < 70300
 #define zend_string_release_ex(s, persistent) zend_string_release((s))
+static zend_always_inline void zval_ptr_dtor_str(zval *zval_ptr)
+{
+       if (Z_REFCOUNTED_P(zval_ptr) && !Z_DELREF_P(zval_ptr)) {
+               ZEND_ASSERT(Z_TYPE_P(zval_ptr) == IS_STRING);
+               ZEND_ASSERT(!ZSTR_IS_INTERNED(Z_STR_P(zval_ptr)));
+               ZEND_ASSERT(!(GC_FLAGS(Z_STR_P(zval_ptr)) & IS_STR_PERSISTENT));
+               efree(Z_STR_P(zval_ptr));
+       }
+}
 #endif
 
 #define RETURN_1_IF_NON_ZERO(cmd) \
@@ -576,9 +596,9 @@ static int igbinary_finish_deferred_calls(struct igbinary_unserialize_data *igsd
 			}
 		}
 	}
-	zval_dtor(&wakeup_name);
+	zval_ptr_dtor_str(&wakeup_name);
 #if PHP_VERSION_ID >= 70400 && PHP_VERSION_ID < 80000
-	zval_dtor(&unserialize_name);
+	zval_ptr_dtor_str(&unserialize_name);
 #endif
 	return delayed_call_failed;
 }
@@ -1329,7 +1349,7 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	ZVAL_DEREF(z);
 
 	/* hash */
-	h = object ? zend_get_properties_for(z, ZEND_PROP_PURPOSE_SERIALIZE) : HASH_OF(z);
+	h = object ? zend_get_properties_for(z, ZEND_PROP_PURPOSE_SERIALIZE) : Z_ARRVAL_P(z);
 
 	/* hash size */
 	n = h ? zend_hash_num_elements(h) : 0;
@@ -1721,7 +1741,7 @@ inline static int igbinary_var_serialize_call_magic_serialize(zval *retval, zval
 	BG(serialize_lock)++;
 	res = call_user_function(CG(function_table), obj, &fname, retval, 0, 0);
 	BG(serialize_lock)--;
-	zval_ptr_dtor_nogc(&fname);
+	zval_ptr_dtor_str(&fname);
 
 	if (res == FAILURE || Z_ISUNDEF_P(retval)) {
 		zval_ptr_dtor(retval);
@@ -1817,20 +1837,21 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 		/* function name string */
 		ZVAL_STRINGL(&f, "__sleep", sizeof("__sleep") - 1);
 
-		ZVAL_UNDEF(&h);
 		/* calling z->__sleep */
 		r = call_user_function(CG(function_table), z, &f, &h, 0, 0);
 
-		zval_dtor(&f);
+		zval_ptr_dtor_str(&f);
 
 		if (r == SUCCESS && !EG(exception)) {
+			HashTable *ht;
 			r = 0;
 
 			if (Z_TYPE(h) == IS_UNDEF) {
 				/* FIXME: is this ok? */
 				/* Valid, but skip */
-			} else if (HASH_OF(&h)) {
-				r = igbinary_serialize_array_sleep(igsd, z, HASH_OF(&h), ce);
+			} else if ((ht = HASH_OF(&h)) != NULL) {
+				/* NOTE: PHP permits returning an object in __sleep */
+				r = igbinary_serialize_array_sleep(igsd, z, ht, ce);
 			} else {
 				php_error_docref(NULL, E_NOTICE, "__sleep should return an array only "
 						"containing the names of instance-variables to "
@@ -2383,6 +2404,7 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		}
 	}
 	array_init_size(z_deref, n);
+	h = Z_ARRVAL_P(z_deref);
 	if (create_ref) {
 		/* Only create a reference if this is not from __unserialize(), because the existence of __unserialize can change */
 		struct igbinary_value_ref ref;
@@ -2398,7 +2420,6 @@ inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *i
 		RETURN_1_IF_NON_ZERO(igsd_append_ref(igsd, ref) == SIZE_MAX);
 	}
 
-	h = HASH_OF(z_deref);
 	for (i = 0; i < n; i++) {
 		zval *vp;
 		zend_long key_index = 0;
@@ -2561,7 +2582,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 		return 0;
 	}
 
-	h = HASH_OF(z_deref);
+	h = HASH_OF_OBJECT(z_deref);
 
 	did_extend = 0;
 
@@ -2812,20 +2833,17 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 
 		/* Call unserialize callback */
 		ZVAL_STRING(&user_func, user_func_name);
-		/* FIXME: Do we need a str copy? */
-		/* FIXME: Release arg[0] */
-		/* FIXME: Release class_name */
-		ZVAL_STR_COPY(&args[0], class_name);
+		ZVAL_STR(&args[0], class_name);
 		if (call_user_function(CG(function_table), NULL, &user_func, &retval, 1, args) != SUCCESS) {
 			php_error_docref(NULL, E_WARNING, "defined (%s) but not found", Z_STRVAL(user_func));
 			incomplete_class = 1;
 			ce = PHP_IC_ENTRY;
-			zval_ptr_dtor_nogc(&args[0]);
 			zval_ptr_dtor_nogc(&user_func);
 			break;
 		}
 		/* FIXME: always safe? */
 		zval_ptr_dtor(&retval);
+		zval_ptr_dtor_str(&user_func);
 
 		/* The callback function may have defined the class */
 		ce = zend_lookup_class(class_name);
@@ -2835,8 +2853,6 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 			ce = PHP_IC_ENTRY;
 		}
 
-		zval_ptr_dtor_nogc(&args[0]);
-		zval_ptr_dtor_nogc(&user_func);
 	} while (0);
 
 	/* previous user function call may have raised an exception */
