@@ -1574,7 +1574,7 @@ inline static int igbinary_serialize_array_sleep_inner(struct igbinary_serialize
 
 					RETURN_1_IF_NON_ZERO(igbinary_serialize_null(igsd));
 
-					return 0;
+					continue;
 				}
 			}
 
@@ -1603,9 +1603,9 @@ inline static int igbinary_serialize_array_sleep(struct igbinary_serialize_data 
 			return 0;
 		}
 	} else if (n <= 0xffff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_array8, n))
+		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_array16, n))
 	} else {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array8, n))
+		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array32, n))
 	}
 
 	object_properties = zend_get_properties_for(z, ZEND_PROP_PURPOSE_SERIALIZE);

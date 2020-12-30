@@ -44,6 +44,7 @@
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
  <notes>
 * Fix bug in out of memory error handling in __sleep, slightly speed up serializing with __sleep.
+* Continue serializing remaining properties if a missing property name is returned from __sleep.
 * Speed up serializing by optimizing for the case where there is no memory manager override.
   When there is a memory manager override, only use that for allocating the string to return.
   (benchmarks/serialize-scalar-int.b.php showed a speedup from 0.22 to 0.18 seconds for repeated serialization of a single scalar,
