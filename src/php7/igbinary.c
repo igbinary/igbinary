@@ -296,7 +296,7 @@ inline static uint32_t igbinary_unserialize32(struct igbinary_unserialize_data *
 inline static uint64_t igbinary_unserialize64(struct igbinary_unserialize_data *igsd);
 
 inline static int igbinary_unserialize_long(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zend_long *ret);
-inline static int igbinary_unserialize_double(struct igbinary_unserialize_data *igsd, enum igbinary_type t, double *ret);
+inline static int igbinary_unserialize_double(struct igbinary_unserialize_data *igsd, double *ret);
 inline static zend_string *igbinary_unserialize_string(struct igbinary_unserialize_data *igsd, enum igbinary_type t);
 inline static zend_string *igbinary_unserialize_chararray(struct igbinary_unserialize_data *igsd, enum igbinary_type t);
 
@@ -2194,13 +2194,11 @@ inline static int igbinary_unserialize_long(struct igbinary_unserialize_data *ig
 /* }}} */
 /* {{{ igbinary_unserialize_double */
 /** Unserializes double. */
-inline static int igbinary_unserialize_double(struct igbinary_unserialize_data *igsd, enum igbinary_type t, double *ret) {
+inline static int igbinary_unserialize_double(struct igbinary_unserialize_data *igsd, double *ret) {
 	union {
 		double d;
 		uint64_t u;
 	} u;
-
-	(void)t;
 
 	if (IGB_NEEDS_MORE_DATA(igsd, 8)) {
 		zend_error(E_WARNING, "igbinary_unserialize_double: end-of-data");
@@ -3253,7 +3251,7 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 			ZVAL_BOOL(z, 1);
 			break;
 		case igbinary_type_double:
-			if (igbinary_unserialize_double(igsd, t, &tmp_double)) {
+			if (igbinary_unserialize_double(igsd, &tmp_double)) {
 				return 1;
 			}
 			ZVAL_DOUBLE(z, tmp_double);
