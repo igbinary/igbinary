@@ -1629,9 +1629,9 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 		if (name_len <= 0xff) {
 			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, igbinary_type_object8, name_len))
 		} else if (name_len <= 0xffff) {
-			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_object8, name_len))
+			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_object16, name_len))
 		} else {
-			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_object8, name_len))
+			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_object32, name_len))
 		}
 
 		RETURN_1_IF_NON_ZERO(igbinary_serialize_resize(igsd, name_len));
@@ -1644,9 +1644,9 @@ inline static int igbinary_serialize_object_name(struct igbinary_serialize_data 
 		if (value <= 0xff) {
 			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, (uint8_t)igbinary_type_object_id8, value))
 		} else if (value <= 0xffff) {
-			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, (uint8_t)igbinary_type_object_id16, value))
+			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, (uint8_t)igbinary_type_object_id16, value))
 		} else {
-			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, (uint8_t)igbinary_type_object_id32, value))
+			RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, (uint8_t)igbinary_type_object_id32, value))
 		}
 	} else {
 		return 1; /* Failed to allocate copy of string */
