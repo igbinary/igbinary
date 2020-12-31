@@ -60,6 +60,7 @@
    <file name="src/php7/hash_ptr.h" role="src" />
    <file name="src/php7/hash_si.c" role="src" />
    <file name="src/php7/hash_si_ptr.c" role="src" />
+   <file name="src/php7/igbinary_bswap.h" role="src" />
    <file name="src/php7/igbinary.c" role="src" />
    <file name="src/php7/igbinary.h" role="src" />
    <file name="src/php7/igbinary_macros.h" role="src" />

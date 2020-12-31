@@ -54,17 +54,16 @@ int hash_si_init(struct hash_si *h, uint32_t size) {
 /* {{{ hash_si_deinit */
 void hash_si_deinit(struct hash_si *h) {
 	size_t i;
+	const size_t mask = h->mask;
+	struct hash_si_pair *const data = h->data;
 
-	for (i = 0; i <= h->mask; i++) {
-		if (h->data[i].key_zstr != NULL) {
-			zend_string_release(h->data[i].key_zstr);
+	for (i = 0; i <= mask; i++) {
+		if (data[i].key_zstr != NULL) {
+			zend_string_release(data[i].key_zstr);
 		}
 	}
 
-	efree(h->data);
-
-	h->mask = 0;
-	h->used = 0;
+	efree(data);
 }
 /* }}} */
 /* {{{ get_key_hash */

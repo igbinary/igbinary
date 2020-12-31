@@ -260,7 +260,7 @@ struct igbinary_unserialize_data {
 /* }}} */
 /* {{{ Serializing functions prototypes */
 inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *igsd, bool scalar);
-inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd, int free_buffer);
+inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd);
 
 inline static void igbinary_serialize_header(struct igbinary_serialize_data *igsd);
 
@@ -529,17 +529,20 @@ static int igbinary_finish_deferred_calls(struct igbinary_unserialize_data *igsd
 #endif
 	zval wakeup_name;
 	size_t i;
+	struct deferred_call *deferred_arr;
+	size_t deferred_count = igsd->deferred_count;
 	zend_bool delayed_call_failed = 0;
 	igsd->deferred_finished = 1;
-	if (igsd->deferred_count == 0) { /* nothing to do */
+	if (deferred_count == 0) { /* nothing to do */
 		return 0;
 	}
+	deferred_arr = igsd->deferred;
 #if PHP_VERSION_ID >= 70400 && PHP_VERSION_ID < 80000
 	ZVAL_STRINGL(&unserialize_name, "__unserialize", sizeof("__unserialize") - 1);
 #endif
 	ZVAL_STRINGL(&wakeup_name, "__wakeup", sizeof("__wakeup") - 1);
-	for (i = 0; i < igsd->deferred_count; i++) {
-		struct deferred_call *deferred = &igsd->deferred[i];
+	for (i = 0; i < deferred_count; i++) {
+		struct deferred_call *deferred = &deferred_arr[i];
 #if PHP_VERSION_ID >= 70400
 		if (deferred->is_unserialize) {
 			struct deferred_unserialize_call *unserialize_call = &deferred->data.unserialize;
@@ -685,6 +688,7 @@ IGBINARY_API int igbinary_serialize(uint8_t **ret, size_t *ret_len, zval *z) {
 IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, struct igbinary_memory_manager *memory_manager) {
 	struct igbinary_serialize_data igsd;
 	uint8_t *tmpbuf;
+	int return_code;
 	// While we can't get passed references through the PHP_FUNCTIONs igbinary declares, third party code can invoke igbinary's methods with references.
 	// See https://github.com/php-memcached-dev/php-memcached/issues/326
 	if (UNEXPECTED(Z_TYPE_P(z) == IS_INDIRECT)) {
@@ -698,30 +702,30 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 	}
 
 	igbinary_serialize_header(&igsd);
+	return_code = 0;
 
 	if (UNEXPECTED(igbinary_serialize_zval(&igsd, z) != 0)) {
-		igbinary_serialize_data_deinit(&igsd, 1);
-		return 1;
+		return_code = 1;
+		goto cleanup;
 	}
 
 	/* Explicit null termination */
 	/* TODO: Stop doing this in the next major version, serialized data can contain nulls in the middle and callers should check length  */
 	if (UNEXPECTED(igbinary_serialize8(&igsd, 0) != 0)) {
-		igbinary_serialize_data_deinit(&igsd, 1);
-		return 1;
+		return_code = 1;
+		goto cleanup;
 	}
 
 	/* shrink buffer to the real length, ignore errors */
-	if (memory_manager) {
+	if (UNEXPECTED(memory_manager)) {
 		tmpbuf = memory_manager->alloc(igsd.buffer_size, memory_manager->context);
 		if (tmpbuf != NULL) {
 			memcpy(tmpbuf, igsd.buffer, igsd.buffer_size);
 		}
-		/* Unconditionally free the emalloc()ed data */
-		igbinary_serialize_data_deinit(&igsd, 1);
 
 		if (tmpbuf == NULL) {
-			return 1;
+			return_code = 1;
+			goto cleanup;
 		}
 		*ret = tmpbuf;
 		*ret_len = igsd.buffer_size - 1;
@@ -729,11 +733,12 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
 		/* Set return values */
 		*ret_len = igsd.buffer_size - 1;
 		*ret = igsd.buffer;
-
-		igbinary_serialize_data_deinit(&igsd, 0);
+		igsd.buffer = NULL;
 	}
 
-	return 0;
+cleanup:
+	igbinary_serialize_data_deinit(&igsd);
+	return return_code;
 }
 /* }}} */
 /* {{{ int igbinary_unserialize(const uint8_t *, size_t, zval **) */
@@ -746,6 +751,7 @@ IGBINARY_API int igbinary_serialize_ex(uint8_t **ret, size_t *ret_len, zval *z, 
  */
 IGBINARY_API int igbinary_unserialize(const uint8_t *buf, size_t buf_len, zval *z) {
 	struct igbinary_unserialize_data igsd;
+	int ret = 0;
 
 	igbinary_unserialize_data_init(&igsd);
 
@@ -753,30 +759,31 @@ IGBINARY_API int igbinary_unserialize(const uint8_t *buf, size_t buf_len, zval *
 	igsd.buffer_ptr = buf;
 	igsd.buffer_end = buf + buf_len;
 
-	if (igbinary_unserialize_header(&igsd)) {
-		igbinary_unserialize_data_deinit(&igsd);
-		return 1;
+	if (UNEXPECTED(igbinary_unserialize_header(&igsd))) {
+		ret = 1;
+		goto cleanup;
 	}
 
-	if (igbinary_unserialize_zval(&igsd, z, WANT_CLEAR)) {
-		igbinary_unserialize_data_deinit(&igsd);
-		return 1;
+	if (UNEXPECTED(igbinary_unserialize_zval(&igsd, z, WANT_CLEAR))) {
+		ret = 1;
+		goto cleanup;
 	}
 
-	if (igsd.buffer_ptr < igsd.buffer_end) {
+	if (UNEXPECTED(igsd.buffer_ptr < igsd.buffer_end)) {
 		// https://github.com/igbinary/igbinary/issues/64
 		zend_error(E_WARNING, "igbinary_unserialize: received more data to unserialize than expected");
-		igbinary_unserialize_data_deinit(&igsd);
-		return 1;
+		ret = 1;
+		goto cleanup;
 	}
 
-	if (igbinary_finish_deferred_calls(&igsd)) {
-		igbinary_unserialize_data_deinit(&igsd);
-		return 1;
+	if (UNEXPECTED(igbinary_finish_deferred_calls(&igsd))) {
+		ret = 1;
+		goto cleanup;
 	}
+cleanup:
 	igbinary_unserialize_data_deinit(&igsd);
 
-	return 0;
+	return ret;
 }
 /* }}} */
 /* {{{ proto string igbinary_unserialize(mixed value) */
@@ -854,14 +861,14 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	/** the same way we would serialize a regular array. */
 	/** The corresponding PS_SERIALIZER_DECODE_FUNC will unserialize the array and individually add the session variables. */
 	if (igbinary_serialize_array(&igsd, session_vars, false, false, true) != 0) {
-		igbinary_serialize_data_deinit(&igsd, 1);
 		zend_error(E_WARNING, "igbinary_serialize: cannot serialize session variables");
-		return ZSTR_EMPTY_ALLOC();
+		result = ZSTR_EMPTY_ALLOC();
+	} else {
+		/* Copy the buffer to a new zend_string */
+		result = zend_string_init((const char *)igsd.buffer, igsd.buffer_size, 0);
 	}
 
-	/* Copy the buffer to a new zend_string */
-	result = zend_string_init((const char *)igsd.buffer, igsd.buffer_size, 0);
-	igbinary_serialize_data_deinit(&igsd, 1);
+	igbinary_serialize_data_deinit(&igsd);
 
 	return result;
 }
@@ -882,6 +889,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 	zval z;
 	zval *d;
 	zend_string *key;
+	int ret = 0;
 
 	struct igbinary_unserialize_data igsd;
 
@@ -897,24 +905,25 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 	igsd.buffer_ptr = igsd.buffer;
 	igsd.buffer_end = igsd.buffer + vallen;
 
-	if (igbinary_unserialize_header(&igsd)) {
-		igbinary_unserialize_data_deinit(&igsd);
-		return FAILURE;
+	if (UNEXPECTED(igbinary_unserialize_header(&igsd))) {
+		ret = 1;
+		goto deinit;
 	}
 
 	/** The serializer serialized the session variables as an array. So, we unserialize that array. */
 	/** We then iterate over the array to set the individual session variables (managing the reference counts), then free the original array. */
-	if (igbinary_unserialize_zval(&igsd, &z, WANT_CLEAR)) {
-		igbinary_unserialize_data_deinit(&igsd);
-		return FAILURE;
+	if (UNEXPECTED(igbinary_unserialize_zval(&igsd, &z, WANT_CLEAR))) {
+		ret = 1;
+		goto deinit;
 	}
 
-	if (igbinary_finish_deferred_calls(&igsd)) {
-		igbinary_unserialize_data_deinit(&igsd);
-		return FAILURE;
-	}
+	ret = igbinary_finish_deferred_calls(&igsd);
 
+deinit:
 	igbinary_unserialize_data_deinit(&igsd);
+	if (UNEXPECTED(ret)) {
+		return FAILURE;
+	}
 
 	/* Validate that this is of the correct data type */
 	tmp_hash = HASH_OF(&z);
@@ -1009,8 +1018,8 @@ inline static int igbinary_serialize_data_init(struct igbinary_serialize_data *i
 /* }}} */
 /* {{{ igbinary_serialize_data_deinit */
 /** Deinits igbinary_serialize_data, freeing the allocated data structures. */
-inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd, int free_buffer) {
-	if (free_buffer && igsd->buffer) {
+inline static void igbinary_serialize_data_deinit(struct igbinary_serialize_data *igsd) {
+	if (igsd->buffer) {
 		efree(igsd->buffer);
 	}
 
@@ -1383,10 +1392,12 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	/* serialize properties. */
 	ZEND_HASH_FOREACH_KEY_VAL(h, key_index, key, d) {
 		/* skip magic member in incomplete classes */
-		if (incomplete_class && strcmp(ZSTR_VAL(key), MAGIC_MEMBER) == 0) {
+		/* Match it exactly and permit null bytes in the middle so that the counts will match. */
+		if (incomplete_class && zend_string_equals_literal(key, MAGIC_MEMBER)) {
 			continue;
 		}
-		if (d == NULL) {
+		if (UNEXPECTED(d == NULL)) {
+			/* Not sure how this would happen */
 			php_error_docref(NULL, E_NOTICE, "Received NULL value from hash.");
 			if (object) {
 				zend_release_properties(h);
@@ -1416,11 +1427,7 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 
 		/* we should still add element even if it's not OK,
 		 * since we already wrote the length of the array before */
-		if (Z_TYPE_P(d) == IS_UNDEF) {
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_null(igsd));
-		} else {
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_zval(igsd, d));
-		}
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_zval(igsd, d));
 	} ZEND_HASH_FOREACH_END();
 	if (object) {
 		zend_release_properties(h);
@@ -1443,7 +1450,7 @@ inline static int igbinary_serialize_array_ref(struct igbinary_serialize_data *i
 	/* If I do, then more tests fail. */
 	/* is_ref || IS_OBJECT implies it has a unique refcounted struct */
 	if (object && Z_TYPE_P(z) == IS_OBJECT) {
-		key = (zend_uintptr_t)Z_OBJ_HANDLE_P(z); /* expand object handle(uint32_t), cast to 32-bit/64-bit pointer */
+		key = (zend_uintptr_t)Z_OBJ_P(z); /* expand object handle(uint32_t), cast to 32-bit/64-bit pointer */
 	} else if (is_ref) {
 		/* NOTE: PHP switched from `zval*` to `zval` for the values stored in HashTables.
 		 * If an array has two references to the same ZVAL, then those references will have different zvals.
@@ -1994,28 +2001,29 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_data *igsd) {
 	if (igsd->strings) {
 		size_t i;
-		for (i = 0; i < igsd->strings_count; i++) {
-			zend_string *s = igsd->strings[i];
+		size_t strings_count = igsd->strings_count;
+		zend_string **strings = igsd->strings;
+		for (i = 0; i < strings_count; i++) {
+			zend_string *s = strings[i];
 #if ZEND_DEBUG
 			ZEND_ASSERT(GC_REFCOUNT(s) >= 1);
 #endif
 			zend_string_release_ex(s, 0); /* Should only create interned or non-persistent strings when unserializing */
 		}
 
-		efree(igsd->strings);
-		igsd->strings = NULL;
+		efree(strings);
 	}
 
 	if (igsd->references) {
 		efree(igsd->references);
-		igsd->references = NULL;
 	}
 	if (igsd->deferred) {
+		struct deferred_call *calls = igsd->deferred;
 #if PHP_VERSION_ID >= 70400
 		size_t i;
 		size_t n = igsd->deferred_count;
 		for (i = 0; i < n; i++) {
-			struct deferred_call *call = &igsd->deferred[i];
+			struct deferred_call *call = &calls[i];
 			if (call->is_unserialize) {
 				if (!igsd->deferred_finished) {
 					struct deferred_unserialize_call *unserialize_call = &call->data.unserialize;
@@ -2524,7 +2532,7 @@ cleanup:
 		}
 
 		ZEND_ASSERT(vp != NULL);
-		if (igbinary_unserialize_zval(igsd, vp, WANT_CLEAR)) {
+		if (UNEXPECTED(igbinary_unserialize_zval(igsd, vp, WANT_CLEAR))) {
 			return 1;
 		}
 	}
@@ -2537,13 +2545,9 @@ cleanup:
 inline static int igbinary_unserialize_object_properties(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z) {
 	/* WANT_REF means that z will be wrapped by an IS_REFERENCE */
 	uint32_t n;
-	uint32_t i;
 
 	zval v;
-	zval *vp;
 	zval *z_deref;
-
-	enum igbinary_type key_type;
 
 	HashTable *h;
 	zend_bool did_extend;
@@ -2589,7 +2593,10 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 
 	did_extend = 0;
 
-	for (i = 0; i < n; i++) {
+	do {
+		n--;
+		zval *vp;
+		enum igbinary_type key_type;
 		zend_string *key_str = NULL; /* NULL means use key_index */
 
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
@@ -2612,7 +2619,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			case igbinary_type_long64n:
 			{
 				zend_long key_index = 0;
-				if (igbinary_unserialize_long(igsd, key_type, &key_index)) {
+				if (UNEXPECTED(igbinary_unserialize_long(igsd, key_type, &key_index))) {
 					zval_dtor(z);
 					ZVAL_UNDEF(z);
 					return 1;
@@ -2684,8 +2691,8 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			vp = prototype_value;
 		} else {
 			if (!did_extend) {
-				/* n is at least one, because we're looping from 0..n-1 */
-				uint32_t remaining_elements = n - i;
+				/* remaining_elements is at least one, because we're looping from n-1..0 */
+				uint32_t remaining_elements = n + 1;
 				/* Copied from var_unserializer.re. Need to ensure that IGB_REF_VAL doesn't point to invalid data. */
 				/* Worst case: All remaining_elements of the added properties are dynamic. */
 				zend_hash_extend(h, zend_hash_num_elements(h) + remaining_elements, (h->u.flags & HASH_FLAG_PACKED));
@@ -2696,13 +2703,10 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 
 		zend_string_release(key_str);
 
-		ZEND_ASSERT(vp != NULL);
-		if (Z_TYPE_P(vp) == IS_INDIRECT) {
-			vp = Z_INDIRECT_P(vp);
-		}
+		/* Should only be indirect for typed properties? */
+		ZEND_ASSERT(Z_TYPE_P(vp) != IS_INDIRECT);
 
-		ZEND_ASSERT(vp != NULL);
-		if (igbinary_unserialize_zval(igsd, vp, WANT_CLEAR)) {
+		if (UNEXPECTED(igbinary_unserialize_zval(igsd, vp, WANT_CLEAR))) {
 			/* Unserializing a property into this zval has failed. */
 			/* zval_ptr_dtor(z); */
 			/* zval_ptr_dtor(vp); */
@@ -2720,7 +2724,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			}
 		}
 #endif
-	}
+	} while (n > 0);
 
 	return 0;
 }
@@ -3136,7 +3140,7 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 
 	switch (t) {
 		case igbinary_type_ref:
-			if (igbinary_unserialize_zval(igsd, z, WANT_REF)) {
+			if (UNEXPECTED(igbinary_unserialize_zval(igsd, z, WANT_REF))) {
 				return 1;
 			}
 
@@ -3175,7 +3179,7 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 		case igbinary_type_ref8:
 		case igbinary_type_ref16:
 		case igbinary_type_ref32:
-			if (igbinary_unserialize_ref(igsd, t, z, flags)) {
+			if (UNEXPECTED(igbinary_unserialize_ref(igsd, t, z, flags))) {
 				return 1;
 			}
 			break;
@@ -3185,14 +3189,14 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 		case igbinary_type_object_id8:
 		case igbinary_type_object_id16:
 		case igbinary_type_object_id32:
-			if (igbinary_unserialize_object(igsd, t, z, flags)) {
+			if (UNEXPECTED(igbinary_unserialize_object(igsd, t, z, flags))) {
 				return 1;
 			}
 			break;
 		case igbinary_type_array8:
 		case igbinary_type_array16:
 		case igbinary_type_array32:
-			if (igbinary_unserialize_array(igsd, t, z, flags, true)) {
+			if (UNEXPECTED(igbinary_unserialize_array(igsd, t, z, flags, true))) {
 				return 1;
 			}
 			break;
@@ -3241,7 +3245,7 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 		case igbinary_type_long32n:
 		case igbinary_type_long64p:
 		case igbinary_type_long64n:
-			if (igbinary_unserialize_long(igsd, t, &tmp_long)) {
+			if (UNEXPECTED(igbinary_unserialize_long(igsd, t, &tmp_long))) {
 				return 1;
 			}
 			ZVAL_LONG(z, tmp_long);
@@ -3256,7 +3260,7 @@ static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zva
 			ZVAL_BOOL(z, 1);
 			break;
 		case igbinary_type_double:
-			if (igbinary_unserialize_double(igsd, &tmp_double)) {
+			if (UNEXPECTED(igbinary_unserialize_double(igsd, &tmp_double))) {
 				return 1;
 			}
 			ZVAL_DOUBLE(z, tmp_double);

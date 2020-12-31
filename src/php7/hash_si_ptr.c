@@ -19,22 +19,23 @@
 
 #include "hash_ptr.h"
 #include "zend.h"
+#include "igbinary_bswap.h"
 
-/* Function similar to zend_inline_hash_func. This is not identical. */
+/* This assumes that pointers differ in low addresses rather than high addresses */
 inline static uint32_t inline_hash_of_address(zend_uintptr_t ptr) {
-	register uint32_t hash = Z_UL(5381);
-	/* Note: Hash the least significant bytes first - Those need to influence the final result as much as possible. */
-	hash = ((hash << 5) + hash) + (ptr & 0xff);
-	hash = ((hash << 5) + hash) + ((ptr >> 8) & 0xff);
-	hash = ((hash << 5) + hash) + ((ptr >> 16) & 0xff);
-	hash = ((hash << 5) + hash) + ((ptr >> 24) & 0xff);
 #if UINTPTR_MAX > UINT32_MAX
-	hash = ((hash << 5) + hash) + ((ptr >> 32) & 0xff);
-	hash = ((hash << 5) + hash) + ((ptr >> 40) & 0xff);
-	hash = ((hash << 5) + hash) + ((ptr >> 48) & 0xff);
-	hash = ((hash << 5) + hash) + ((ptr >> 56) & 0xff);
-#endif
+	uint64_t hash = ptr;
+	hash *= 0x5e2d58d8b3bce8d9;
+	// This is a single assembly instruction on recent compilers/platforms
+	hash = bswap_64(hash);
 	return hash;
+#else
+	uint32_t hash = ptr;
+	hash *= 0x5e2d58d9;
+	// This is a single assembly instruction on recent compilers/platforms
+	hash = bswap_32(hash);
+	return hash;
+#endif
 }
 
 /* {{{ nextpow2 */
