@@ -34,8 +34,8 @@
  <date>2020-01-11</date>
  <time>16:00:00</time>
  <version>
-  <release>3.2.2RC1</release>
-  <api>1.2.5</api>
+  <release>3.2.2dev</release>
+  <api>1.3.0</api>
  </version>
  <stability>
   <release>beta</release>
@@ -43,15 +43,7 @@
  </stability>
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
  <notes>
-* Update php version check to allow igbinary to be statically built in PHP 8.0+
-* Fix bug in out of memory error handling in __sleep, slightly speed up serializing with __sleep.
-* Continue serializing remaining properties if a missing property name is returned from __sleep.
-* Speed up serializing by optimizing for the case where there is no memory manager override.
-  When there is a memory manager override, only use that for allocating the string to return.
-  (benchmarks/serialize-scalar-int.b.php showed a speedup from 0.22 to 0.18 seconds for repeated serialization of a single scalar,
-  and from 0.186 to 0.180 seconds for benchmarks/serialize-stringarray.b.php for an array of strings)
-* Speed up unserializing arrays in php 7.2-8.0 by adding optimized code for finding the hash bucket of
-  a string/integer key of an array, or creating a placeholder if it does not already exist.
+* Add a new type code for serialization and unserialization of PHP strings that are larger than 4GB.
  </notes>
  <contents>
   <dir name="/">
@@ -203,6 +195,11 @@
     <file name="igbinary_084.phpt" role="test" />
     <file name="igbinary_084b.phpt" role="test" />
     <file name="igbinary_085.phpt" role="test" />
+    <file name="igbinary_086.phpt" role="test" />
+    <file name="igbinary_087.phpt" role="test" />
+    <file name="igbinary_088.phpt" role="test" />
+    <file name="igbinary_089.phpt" role="test" />
+    <file name="igbinary_090.phpt" role="test" />
     <file name="igbinary_bug54662.phpt" role="test" />
     <file name="igbinary_bug72134.phpt" role="test" />
     <file name="igbinary_unserialize_v1_compatible.phpt" role="test" />
@@ -222,6 +219,30 @@
  <providesextension>igbinary</providesextension>
  <extsrcrelease />
  <changelog>
+  <release>
+   <date>2020-01-11</date>
+   <time>16:00:00</time>
+   <version>
+    <release>3.2.2RC1</release>
+    <api>1.2.5</api>
+   </version>
+   <stability>
+    <release>beta</release>
+    <api>stable</api>
+   </stability>
+   <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
+   <notes>
+* Update php version check to allow igbinary to be statically built in PHP 8.0+
+* Fix bug in out of memory error handling in __sleep, slightly speed up serializing with __sleep.
+* Continue serializing remaining properties if a missing property name is returned from __sleep.
+* Speed up serializing by optimizing for the case where there is no memory manager override.
+  When there is a memory manager override, only use that for allocating the string to return.
+  (benchmarks/serialize-scalar-int.b.php showed a speedup from 0.22 to 0.18 seconds for repeated serialization of a single scalar,
+  and from 0.186 to 0.180 seconds for benchmarks/serialize-stringarray.b.php for an array of strings)
+* Speed up unserializing arrays in php 7.2-8.0 by adding optimized code for finding the hash bucket of
+  a string/integer key of an array, or creating a placeholder if it does not already exist.
+   </notes>
+  </release>
   <release>
    <date>2020-12-27</date>
    <time>16:00:00</time>

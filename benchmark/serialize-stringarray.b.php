@@ -11,7 +11,7 @@ $array = unserialize(file_get_contents(dirname(__FILE__) . DIRECTORY_SEPARATOR .
 for ($i = 0; $i < 40; $i++) {
 	$b->start();
 	for ($j = 0; $j < 360; $j++) {
-		$ser = serialize($array);
+		$ser = igbinary_serialize($array);
 	}
 	$b->stop($j);
 	$b->write();
