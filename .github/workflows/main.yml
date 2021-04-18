@@ -27,11 +27,17 @@ jobs:
          # NOTE: If this is not quoted, the yaml parser will convert 7.0 to the number 7,
          # and the docker image `php:7` is the latest minor version of php 7.x (7.4).
          - PHP_VERSION: '7.0'
+           PHP_VERSION_FULL: 7.0.33
          - PHP_VERSION: '7.1'
+           PHP_VERSION_FULL: 7.1.33
          - PHP_VERSION: '7.2'
+           PHP_VERSION_FULL: 7.2.34
          - PHP_VERSION: '7.3'
+           PHP_VERSION_FULL: 7.3.27
          - PHP_VERSION: '7.4'
+           PHP_VERSION_FULL: 7.4.16
          - PHP_VERSION: '8.0'
+           PHP_VERSION_FULL: 8.0.3
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -41,5 +47,14 @@ jobs:
       # Runs a single command using the runners shell
       - name: Build and test in docker
         run: bash ci/test_dockerized.sh ${{ matrix.PHP_VERSION }}
+
+      # We reuse the php base image because
+      # 1. It has any necessary dependencies installed for php 7.0-8.0
+      # 2. It is already downloaded
+      #
+      # We need to install valgrind then rebuild php from source with the configure option '--with-valgrind' to avoid valgrind false positives
+      # because php-src has inline assembly that causes false positives in valgrind when that option isn't used.
+      - name: Build and test in docker again with valgrind
+        run: bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }}
       # NOTE: tests report false positives for zend_string_equals in php 7.3+
       # due to the use of inline assembly in php-src. (not related to igbinary)

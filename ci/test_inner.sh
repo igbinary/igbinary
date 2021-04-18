@@ -4,6 +4,9 @@
 # -u fail for undefined variables
 set -xeu
 echo "Run tests in docker"
-REPORT_EXIT_STATUS=1 php ci/run-tests-parallel.php -j$(nproc) -P -q --show-diff
+php --version
+php --ini
+cp ci/run-tests-parallel.php run-tests.php
+REPORT_EXIT_STATUS=1 make test TESTS="-j$(nproc) -P -q --show-diff"
 echo "Test that package.xml is valid"
 pecl package

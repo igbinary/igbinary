@@ -10,9 +10,7 @@ fi
 # -u fail for undefined variables
 set -xeu
 PHP_VERSION=$1
+
 DOCKER_IMAGE=igbinary-$PHP_VERSION-test-runner
 docker build --build-arg="PHP_VERSION=$PHP_VERSION" --tag="$DOCKER_IMAGE" -f ci/Dockerfile .
 docker run --rm $DOCKER_IMAGE ci/test_inner.sh
-# NOTE: php 7.3+ will fail in valgrind because php-src uses custom assembly for its implementation of zend_string_equals
-# In order to fix those false positives, a different set of images would be needed where (1) valgrind was installed before compiling php, and (2) php was compiled with support for valgrind (--with-valgrind) to avoid false positives
-# docker run --rm $DOCKER_IMAGE ci/test_inner_valgrind.sh
