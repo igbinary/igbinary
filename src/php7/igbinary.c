@@ -111,13 +111,16 @@ static zend_always_inline void zval_ptr_dtor_str(zval *zval_ptr)
 
 #if PHP_VERSION_ID >= 70400
 # ifdef ZEND_ACC_NOT_SERIALIZABLE
-#define IGBINARY_IS_NOT_SERIALIZABLE(ce) UNEXPECTED((ce)->ce_flags & (ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_ANON_CLASS))
+#define IGBINARY_IS_NOT_SERIALIZABLE_COMMON(ce) UNEXPECTED((ce)->ce_flags & (ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_ANON_CLASS))
 # else
-#define IGBINARY_IS_NOT_SERIALIZABLE(ce) UNEXPECTED(((ce)->ce_flags & (ZEND_ACC_ANON_CLASS)) || (ce)->serialize == zend_class_serialize_deny)
+#define IGBINARY_IS_NOT_SERIALIZABLE_COMMON(ce) UNEXPECTED((ce)->ce_flags & (ZEND_ACC_ANON_CLASS))
 # endif
+#define IGBINARY_IS_NOT_SERIALIZABLE(ce) UNEXPECTED(IGBINARY_IS_NOT_SERIALIZABLE_COMMON(ce) || (ce)->serialize == zend_class_serialize_deny)
+#define IGBINARY_IS_NOT_UNSERIALIZABLE(ce) UNEXPECTED(IGBINARY_IS_NOT_SERIALIZABLE_COMMON(ce) || (ce)->unserialize == zend_class_unserialize_deny)
 #else
 // Because '__serialize' is not available prior to 7.4, this check is redundant.
 #define IGBINARY_IS_NOT_SERIALIZABLE(ce) (0)
+#define IGBINARY_IS_NOT_UNSERIALIZABLE(ce) (0)
 #endif
 
 
@@ -2864,7 +2867,7 @@ static ZEND_COLD int igbinary_unserialize_object_ser(struct igbinary_unserialize
 		return 1;
 	}
 
-	if (IGBINARY_IS_NOT_SERIALIZABLE(ce)) {
+	if (IGBINARY_IS_NOT_UNSERIALIZABLE(ce)) {
 		zend_throw_exception_ex(NULL, 0, "Unserialization of '%s' is not allowed", ZSTR_VAL(ce->name));
 		return 1;
 	}
@@ -3053,7 +3056,7 @@ inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *
 		}
 	} while (0);
 
-	if (IGBINARY_IS_NOT_SERIALIZABLE(ce)) {
+	if (IGBINARY_IS_NOT_UNSERIALIZABLE(ce)) {
 		zend_throw_exception_ex(NULL, 0, "Unserialization of '%s' is not allowed", ZSTR_VAL(ce->name));
 		zend_string_release(class_name);
 		return 1;
