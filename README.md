@@ -12,7 +12,7 @@ Memory savings are significant when using memcached, APCu, or similar memory bas
 The typical reduction in storage requirements are around 50%.
 The exact percentage depends on your data.
 
-Unserialization performance is [at least on par with the standard PHP serializer, and is much faster for repetitive data](benchmarks/comparisons.php).
+Unserialization performance is [at least on par with the standard PHP serializer, and is much faster for repetitive data](benchmark/comparisons.php).
 Serialization performance depends on the `igbinary.compact_strings` option which enables
 duplicate string tracking.
 String are inserted to a hash table, which adds some overhead when serializing.
