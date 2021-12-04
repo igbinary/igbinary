@@ -27,7 +27,7 @@
 #include "Zend/zend_enum.h"
 #endif
 
-#if HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION)
+#if HAVE_PHP_SESSION
 # include "ext/session/php_session.h"
 #endif
 
@@ -68,10 +68,13 @@
 #include "zend_alloc.h"
 #include "igbinary_zend_hash.h"
 
-#if HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION)
+#if HAVE_PHP_SESSION
 /** Session serializer function prototypes. */
 PS_SERIALIZER_FUNCS(igbinary);
-#endif /* HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION) */
+#if defined(COMPILE_DL_SESSION)
+static bool registered_igbinary_session_serializer = false;
+#endif
+#endif /* HAVE_PHP_SESSION */
 
 #if defined(HAVE_APCU_SUPPORT)
 /** Apc serializer function prototypes */
@@ -412,10 +415,33 @@ PHP_MINIT_FUNCTION(igbinary) {
 	(void)module_number;
 	ZEND_INIT_MODULE_GLOBALS(igbinary, php_igbinary_init_globals, NULL);
 
-#if HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION)
+#if HAVE_PHP_SESSION
+#if !defined(COMPILE_DL_SESSION)
 	php_session_register_serializer("igbinary",
 		PS_SERIALIZER_ENCODE_NAME(igbinary),
 		PS_SERIALIZER_DECODE_NAME(igbinary));
+#elif PHP_VERSION_ID >= 80200
+	/* Because igbinary's session support depends on function pointers from the session module,
+	 * igbinary can only install session serializers/unserializers if the session module was initialized before igbinary was (MINIT). */
+	zend_module_entry *session_module = zend_hash_str_find_ptr(&module_registry, "session", sizeof("session") - 1);
+	if (session_module && session_module->module_started && session_module->globals_size) {
+		php_ps_globals *session_globals;
+#ifdef ZTS
+		/* Note that TSRMG_STATIC can't be used because `ps_globals_id` is a C symbol defined in session.so,
+		 * and if that symbol was undefined then igbinary.so couldn't be used. */
+		session_globals = ((php_ps_globals*) (*((void ***) tsrm_get_ls_cache()))[TSRM_UNSHUFFLE_RSRC_ID(*session_module->globals_id_ptr)]);
+#else
+		session_globals = session_module->globals_ptr;
+#endif
+		php_session_register_serializer_func_t register_serializer = session_globals ? session_globals->register_serializer : NULL;
+		if (register_serializer) {
+			register_serializer("igbinary",
+				PS_SERIALIZER_ENCODE_NAME(igbinary),
+				PS_SERIALIZER_DECODE_NAME(igbinary));
+			registered_igbinary_session_serializer = true;
+		}
+	}
+#endif
 #endif
 
 #if defined(HAVE_APCU_SUPPORT)
@@ -463,8 +489,12 @@ PHP_MINFO_FUNCTION(igbinary) {
 #else
 	php_info_print_table_row(2, "igbinary APCu serializer ABI", "no");
 #endif
-#if HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION)
+#if HAVE_PHP_SESSION
+#if !defined(COMPILE_DL_SESSION)
 	php_info_print_table_row(2, "igbinary session support", "yes");
+#else
+	php_info_print_table_row(2, "igbinary session support", registered_igbinary_session_serializer ? "yes" : "no");
+#endif
 #else
 	php_info_print_table_row(2, "igbinary session support", "no");
 #endif
@@ -850,7 +880,7 @@ PHP_FUNCTION(igbinary_serialize) {
 	efree(string);
 }
 /* }}} */
-#if HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION)
+#if HAVE_PHP_SESSION
 /* {{{ Serializer encode function */
 /**
  * This provides a serializer encode function for PHP's session module (using igbinary),
@@ -862,13 +892,14 @@ PHP_FUNCTION(igbinary_serialize) {
  */
 PS_SERIALIZER_ENCODE_FUNC(igbinary)
 {
-	zval *session_vars;
 	zend_string *result;
 	struct igbinary_serialize_data igsd;
 
-	session_vars = &(PS(http_session_vars));
-	if (Z_ISREF_P(session_vars)) {
-		session_vars = Z_REFVAL_P(session_vars);
+#if PHP_VERSION_ID < 80200
+	zval *http_session_vars = &(PS(http_session_vars));
+#endif
+	if (Z_ISREF_P(http_session_vars)) {
+		http_session_vars = Z_REFVAL_P(http_session_vars);
 	}
 	if (igbinary_serialize_data_init(&igsd, false)) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot init igsd");
@@ -880,7 +911,7 @@ PS_SERIALIZER_ENCODE_FUNC(igbinary)
 	/** We serialize the passed in array of session_var (including the empty array, for #231) */
 	/** the same way we would serialize a regular array. */
 	/** The corresponding PS_SERIALIZER_DECODE_FUNC will unserialize the array and individually add the session variables. */
-	if (igbinary_serialize_array(&igsd, session_vars, false, false, true) != 0) {
+	if (igbinary_serialize_array(&igsd, http_session_vars, false, false, true) != 0) {
 		zend_error(E_WARNING, "igbinary_serialize: cannot serialize session variables");
 		result = ZSTR_EMPTY_ALLOC();
 	} else {
@@ -969,7 +1000,7 @@ deinit:
 	return SUCCESS;
 }
 /* }}} */
-#endif /* HAVE_PHP_SESSION && !defined(COMPILE_DL_SESSION) */
+#endif /* HAVE_PHP_SESSION */
 
 #if defined(HAVE_APCU_SUPPORT)
 /* {{{ apc_serialize function */
