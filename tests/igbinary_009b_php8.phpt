@@ -12,7 +12,7 @@ if (PHP_MAJOR_VERSION < 8) {
 pcre.jit=0
 --FILE--
 <?php
-error_reporting(E_ALL|E_STRICT);
+error_reporting(PHP_VERSION_ID < 80400 ?E_ALL|E_STRICT : E_ALL);
 // Verify that $type[0] is the same zval as $type[0][0][0], but different from $type[0]
 function test_cyclic2($type, $variable) {
 	$serialized = igbinary_serialize($variable);
