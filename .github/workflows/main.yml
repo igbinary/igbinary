@@ -86,9 +86,10 @@ jobs:
       matrix:
           version:
           # 7.2 and 7.3 currently fail due to https://github.com/php/setup-php-sdk/issues/10
-          # - { os: windows-2019, php: "7.2" }
-          # - { os: windows-2019, php: "7.3" }
-          - { os: windows-2019, php: "7.4" }
+          # Windows Server 2019 has been retired. The Windows Server 2019 image has been removed as of 2025-06-30. For more details, see https://github.com/actions/runner-images/issues/12045
+          - { os: windows-2022, php: "7.2" }
+          - { os: windows-2022, php: "7.3" }
+          - { os: windows-2022, php: "7.4" }
           - { os: windows-2022, php: "8.0" }
           - { os: windows-2022, php: "8.1" }
           - { os: windows-2022, php: "8.2" }
