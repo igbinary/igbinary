@@ -6,7 +6,7 @@ name: CI
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ "master", "php-8.5" ]
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -72,7 +72,7 @@ jobs:
       #
       # We need to install valgrind then rebuild php from source with the configure option '--with-valgrind' to avoid valgrind false positives
       # because php-src has inline assembly that causes false positives in valgrind when that option isn't used.
-      # The OS release in the PHP 7.0 image is too old to install valgrind without workarounds: https://stackoverflow.com/questions/76094428/debian-stretch-repositories-404-not-found
+      # The OS release in the PHP 7.0, 7.1, 7.2 image is too old to install valgrind without workarounds: https://stackoverflow.com/questions/76094428/debian-stretch-repositories-404-not-found
       - name: Build and test in docker again with valgrind
         run: if [[ ${{ matrix.PHP_VERSION }} != '7.0' && ${{ matrix.PHP_VERSION }} != '7.1' && ${{ matrix.PHP_VERSION }} != '7.2' ]]; then bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}; fi
       # NOTE: tests report false positives for zend_string_equals in php 7.3+
