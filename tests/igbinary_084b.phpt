@@ -3,6 +3,9 @@ Properly free duplicate undeclared properties when unserializing invalid data
 --SKIPIF--
 <?php
 if (PHP_VERSION_ID >= 90000) { echo "skip requires php < 9.0 when testing that the deprecation has no impact on igbinary functionality\n"; }
+if (PHP_VERSION_ID >= 80500) {
+    echo "skip: __sleep() and __wakeup() are deprecated in PHP 8.5+ (see https://wiki.php.net/rfc/deprecations_php_8_5#deprecate_the_sleep_and_wakeup_magic_methods)";
+}
 ?>
 --FILE--
 <?php

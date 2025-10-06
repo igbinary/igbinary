@@ -2,6 +2,12 @@
 Should not call __destruct if __wakeup throws an exception (in arrays)
 --INI--
 igbinary.compact_strings = On
+--SKIPIF--
+<?php
+if (PHP_VERSION_ID >= 80500) {
+    echo "skip: __sleep() and __wakeup() are deprecated in PHP 8.5+ (see https://wiki.php.net/rfc/deprecations_php_8_5#deprecate_the_sleep_and_wakeup_magic_methods)";
+}
+?>
 --FILE--
 <?php
 class Thrower {
