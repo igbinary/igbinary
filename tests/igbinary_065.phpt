@@ -1,5 +1,11 @@
 --TEST--
 Don't emit zval has unknown type 0 (IS_UNDEF)
+--SKIPIF--
+<?php
+if (PHP_VERSION_ID >= 80500) {
+    echo "skip: __sleep() and __wakeup() are deprecated in PHP 8.5+ (see https://wiki.php.net/rfc/deprecations_php_8_5#deprecate_the_sleep_and_wakeup_magic_methods)";
+}
+?>
 --FILE--
 <?php
 function var_export_normalized($value) { echo ltrim(var_export($value, true), "\\"); }
