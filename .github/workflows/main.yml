@@ -6,9 +6,7 @@ name: CI
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches:
-      - "master"
-      - "php-8-5"
+    branches: [ "master", "php-8.5" ]
   pull_request:
     branches: [ master ]
 
@@ -74,6 +72,8 @@ jobs:
           # Change the package mirrors of old Debian versions to archive.debian.org
           sudo sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' /etc/apt/sources.list
           sudo sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list
+          # Disable InRelease check (not available on archive mirrors)
+          echo 'Acquire::Check-Valid-Until "false";' | sudo tee /etc/apt/apt.conf.d/99no-check-valid-until
           apt-get update
       # We reuse the php base image because
       # 1. It has any necessary dependencies installed for php 7.0-8.2
