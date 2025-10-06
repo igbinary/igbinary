@@ -75,7 +75,7 @@ jobs:
           sudo sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' /etc/apt/sources.list
           sudo sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list
           # Disable InRelease check (not available on archive mirrors)
-          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+          sudo echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
           apt-get update
       # We reuse the php base image because
       # 1. It has any necessary dependencies installed for php 7.0-8.2
@@ -85,7 +85,7 @@ jobs:
       # because php-src has inline assembly that causes false positives in valgrind when that option isn't used.
       # The OS release in the PHP 7.0 image is too old to install valgrind without workarounds: https://stackoverflow.com/questions/76094428/debian-stretch-repositories-404-not-found
       - name: Build and test in docker again with valgrind
-        run: if [[ ${{ matrix.PHP_VERSION }} != '7.0' ]]; then bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}; fi
+        run: bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}
       # NOTE: tests report false positives for zend_string_equals in php 7.3+
       # due to the use of inline assembly in php-src. (not related to igbinary)
   windows:
