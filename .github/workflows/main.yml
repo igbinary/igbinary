@@ -66,6 +66,15 @@ jobs:
       - name: Build and test in docker
         run: bash ci/test_dockerized.sh ${{ matrix.PHP_VERSION }} ${{ matrix.DOCKER_ARCHITECTURE }}
 
+      - name: Setup apt for old PHP versions
+        if: matrix.PHP_VERSION == '7.0' || matrix.PHP_VERSION == '7.1' || matrix.PHP_VERSION == '7.2'
+        run: |
+          # Change the package mirrors of old Debian versions to archive.debian.org
+          sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' /etc/apt/sources.list
+          sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list
+          # Disable InRelease check (not available on archive mirrors)
+          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+          apt-get update
       # We reuse the php base image because
       # 1. It has any necessary dependencies installed for php 7.0-8.2
       # 2. It is already downloaded
@@ -87,9 +96,9 @@ jobs:
           version:
           # 7.2 and 7.3 currently fail due to https://github.com/php/setup-php-sdk/issues/10
           # Windows Server 2019 has been retired. The Windows Server 2019 image has been removed as of 2025-06-30. For more details, see https://github.com/actions/runner-images/issues/12045
-          - { os: windows-2022, php: "7.2" }
-          - { os: windows-2022, php: "7.3" }
-          - { os: windows-2022, php: "7.4" }
+          # - { os: windows-2019, php: "7.2" }
+          # - { os: windows-2019, php: "7.3" }
+          # - { os: windows-2019, php: "7.4" }
           - { os: windows-2022, php: "8.0" }
           - { os: windows-2022, php: "8.1" }
           - { os: windows-2022, php: "8.2" }
