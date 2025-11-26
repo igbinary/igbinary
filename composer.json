@@ -1,6 +1,7 @@
 {
 	"name": "igbinary/igbinary",
 	"type": "php-ext",
+	"homepage": "https://github.com/igbinary/igbinary",
 	"php-ext": {
 		"extension-name": "igbinary"
 	},
