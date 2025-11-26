@@ -1,0 +1,30 @@
+{
+	"name": "igbinary/igbinary",
+	"type": "php-ext",
+	"php-ext": {
+		"extension-name": "igbinary"
+	},
+	"license": "BSD-3-Clause",
+	"description": "Igbinary is a drop in replacement for the standard php serializer. Instead of the time and space consuming textual representation used by PHP's serialize(), igbinary stores php data structures in a compact binary form. Savings are significant when using memcached or similar memory based storages for serialized data.",
+	"authors": [
+		{
+			"name": "Oleg Grenrus",
+			"email": "oleg.grenrus@iki.fi"
+		},
+		{
+			"name": "Pierre Joye",
+			"email": "pierre@php.net"
+		},
+		{
+			"name": "Teddy Grenman",
+			"email": "teddy.pecl@luuseri.com"
+		},
+		{
+			"name": "Tyson Andre",
+			"email": "tandre@php.net"
+		}
+	],
+	"require": {
+		"php": ">= 7.0.0"
+	}
+}
