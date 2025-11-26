@@ -1,6 +1,8 @@
 --TEST--
 Object test, __wakeup
 --SKIPIF--
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 if(!extension_loaded('igbinary')) {

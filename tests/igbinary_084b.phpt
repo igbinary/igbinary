@@ -4,6 +4,8 @@ Properly free duplicate undeclared properties when unserializing invalid data
 <?php
 if (PHP_VERSION_ID >= 90000) { echo "skip requires php < 9.0 when testing that the deprecation has no impact on igbinary functionality\n"; }
 ?>
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 if (PHP_VERSION_ID >= 80200) { require_once __DIR__ . '/php82_suppress_dynamic_properties_warning.inc'; }

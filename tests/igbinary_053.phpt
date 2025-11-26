@@ -1,5 +1,7 @@
 --TEST--
 __wakeup can modify properties without affecting other objects
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 

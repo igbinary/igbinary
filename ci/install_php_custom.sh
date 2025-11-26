@@ -31,12 +31,12 @@ if [ "x${TRAVIS:-0}" != "x" ]; then
 fi
 
 # Otherwise, put a minimal installation inside of the cache.
-if [ "$PHP_CUSTOM_NORMAL_VERSION" == "8.4.0" ] ; then
-	PHP_CUSTOM_VERSION=8.4.0alpha4
+if [ "$PHP_CUSTOM_NORMAL_VERSION" == "8.5.0" ] ; then
+	PHP_CUSTOM_VERSION=8.5.0RC1
 	PHP_FOLDER="php-$PHP_CUSTOM_VERSION"
 
 	PHP_TAR_FILE="$PHP_FOLDER.tar.bz2"
-	PHP_TAR_URL=https://downloads.php.net/~saki/$PHP_TAR_FILE
+	PHP_TAR_URL=https://downloads.php.net/~daniels/$PHP_TAR_FILE
 else
 	PHP_FOLDER="php-$PHP_CUSTOM_VERSION"
 

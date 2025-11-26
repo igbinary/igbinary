@@ -3,6 +3,7 @@ igbinary session decoder should call __wakeup
 --INI--
 date.timezone=UTC
 session.serialize_handler=igbinary
+error_reporting=E_ALL & ~E_DEPRECATED
 --SKIPIF--
 <?php
 if (!extension_loaded('session')) {

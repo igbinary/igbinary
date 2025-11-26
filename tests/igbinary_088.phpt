@@ -2,6 +2,8 @@
 Test serializing wrong values in __sleep
 --SKIPIF--
 <?php if (!extension_loaded("igbinary")) print "skip"; ?>
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 #[AllowDynamicProperties]

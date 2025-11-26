@@ -23,6 +23,22 @@ PHP_VERSION=$1
 PHP_VERSION_FULL=$2
 ARCHITECTURE=${3:-}
 
+case "$PHP_VERSION_FULL" in
+    *RC[0-9]*)
+        PHP_VERSION="${PHP_VERSION_FULL}"
+        ;;
+    *alpha[0-9]*)
+        PHP_VERSION="${PHP_VERSION_FULL}"
+        ;;
+    *beta[0-9]*)
+        PHP_VERSION="${PHP_VERSION_FULL}"
+        ;;
+    *)
+        # Use only the major.minor version for stable releases.
+        # As provided in PHP_VERSION
+        ;;
+esac
+
 # NOTE: php 7.3-8.0 (but not 8.1) will fail in valgrind without "--with-valgrind" because php-src uses custom assembly for its implementation of zend_string_equals
 # In order to fix those false positives, a different set of images would be needed where (1) valgrind was installed before compiling php, and (2) php was compiled with support for valgrind (--with-valgrind) to avoid false positives
 # docker run --rm $DOCKER_IMAGE ci/test_inner_valgrind.sh

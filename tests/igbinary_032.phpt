@@ -1,5 +1,7 @@
 --TEST--
 Object test, __sleep and __wakeup exceptions
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --SKIPIF--
 <?php
 if(!extension_loaded('igbinary')) {

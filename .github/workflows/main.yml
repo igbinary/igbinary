@@ -44,16 +44,18 @@ jobs:
            PHP_VERSION_FULL: 8.0.30
            DOCKER_ARCHITECTURE: i386
          - PHP_VERSION: '8.1'
-           PHP_VERSION_FULL: 8.1.29
+           PHP_VERSION_FULL: 8.1.33
          - PHP_VERSION: '8.2'
-           PHP_VERSION_FULL: 8.2.22
+           PHP_VERSION_FULL: 8.2.29
          - PHP_VERSION: '8.2'
-           PHP_VERSION_FULL: 8.2.22
+           PHP_VERSION_FULL: 8.2.29
            DOCKER_ARCHITECTURE: i386
-         - PHP_VERSION: '8.3.10'
-           PHP_VERSION_FULL: 8.3.10
-         - PHP_VERSION: '8.4.0alpha4'
-           PHP_VERSION_FULL: 8.4.0alpha4
+         - PHP_VERSION: '8.3'
+           PHP_VERSION_FULL: 8.3.26
+         - PHP_VERSION: '8.4'
+           PHP_VERSION_FULL: 8.4.13
+         - PHP_VERSION: '8.5'
+           PHP_VERSION_FULL: 8.5.0RC1
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -62,19 +64,11 @@ jobs:
 
       # Runs a single command using the runners shell
       - name: Build and test in docker
-        run: bash ci/test_dockerized.sh ${{ matrix.PHP_VERSION }} ${{ matrix.DOCKER_ARCHITECTURE }}
+        run: bash ci/test_dockerized.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}
 
-      # We reuse the php base image because
-      # 1. It has any necessary dependencies installed for php 7.0-8.2
-      # 2. It is already downloaded
-      #
-      # We need to install valgrind then rebuild php from source with the configure option '--with-valgrind' to avoid valgrind false positives
-      # because php-src has inline assembly that causes false positives in valgrind when that option isn't used.
-      # The OS release in the PHP 7.0 image is too old to install valgrind without workarounds: https://stackoverflow.com/questions/76094428/debian-stretch-repositories-404-not-found
       - name: Build and test in docker again with valgrind
-        run: if [[ ${{ matrix.PHP_VERSION }} != '7.0' ]]; then bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}; fi
-      # NOTE: tests report false positives for zend_string_equals in php 7.3+
-      # due to the use of inline assembly in php-src. (not related to igbinary)
+        run: bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}
+
   windows:
     defaults:
       run:
@@ -83,15 +77,16 @@ jobs:
       fail-fast: false
       matrix:
           version:
-          # 7.2 and 7.3 currently fail due to https://github.com/php/setup-php-sdk/issues/10
-          # - { os: windows-2019, php: "7.2" }
-          # - { os: windows-2019, php: "7.3" }
-          - { os: windows-2019, php: "7.4" }
+          # windows 2019 action runner is deprecated https://github.com/actions/runner-images/issues/12045
+          - { os: windows-2022, php: "7.2" }
+          - { os: windows-2022, php: "7.3" }
+          - { os: windows-2022, php: "7.4" }
           - { os: windows-2022, php: "8.0" }
           - { os: windows-2022, php: "8.1" }
           - { os: windows-2022, php: "8.2" }
           - { os: windows-2022, php: "8.3" }
           - { os: windows-2022, php: "8.4" }
+          - { os: windows-2022, php: "8.5" }
           arch: [x64]
           ts: [nts, ts]
     # https://github.com/php/setup-php-sdk?tab=readme-ov-file#inputs
@@ -99,9 +94,18 @@ jobs:
     steps:
       - name: Checkout igbinary
         uses: actions/checkout@v2
+      - name: Install VC15 component
+        if: ${{ matrix.version.php == '7.4' || matrix.version.php == '7.3' || matrix.version.php == '7.2' }}
+        shell: pwsh
+        run: |
+                Set-Location "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
+                $installPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+                $component = "Microsoft.VisualStudio.Component.VC.v141.x86.x64"
+                $args = ('/c', "vs_installer.exe", 'modify', '--installPath', "`"$installPath`"", '--add', $component, '--quiet', '--norestart', '--nocache')
+                $process = Start-Process -FilePath cmd.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
       - name: Setup PHP
         id: setup-php
-        uses: php/setup-php-sdk@v0.9
+        uses: php/setup-php-sdk@v0.11
         with:
           version: ${{matrix.version.php}}
           arch: ${{matrix.arch}}

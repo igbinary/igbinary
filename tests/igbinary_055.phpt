@@ -1,5 +1,7 @@
 --TEST--
 __wakeup can replace a copy of the object referring to the root node.
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 

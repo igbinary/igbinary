@@ -1,5 +1,7 @@
 --TEST--
 igbinary and large arrays
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 class BadSleep {

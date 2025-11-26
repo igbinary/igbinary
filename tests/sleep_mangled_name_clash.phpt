@@ -1,5 +1,7 @@
 --TEST--
 __sleep() returns properties clashing only after mangling
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 class Test {

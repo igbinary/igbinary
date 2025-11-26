@@ -1,5 +1,7 @@
 --TEST--
 Properly free duplicate properties when unserializing invalid data
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 class Test {

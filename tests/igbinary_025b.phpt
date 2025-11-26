@@ -1,6 +1,8 @@
 --TEST--
 Object test, array of small objects with __sleep
 --SKIPIF--
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 if(!extension_loaded('igbinary')) {

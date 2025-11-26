@@ -1,5 +1,7 @@
 --TEST--
 Don't emit zval has unknown type 0 (IS_UNDEF)
+--INI--
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 function var_export_normalized($value) { echo ltrim(var_export($value, true), "\\"); }

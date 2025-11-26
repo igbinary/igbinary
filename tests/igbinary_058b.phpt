@@ -2,6 +2,7 @@
 Should not call __destruct if __wakeup throws an exception (in arrays)
 --INI--
 igbinary.compact_strings = On
+error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 class Thrower {
