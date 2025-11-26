@@ -1,3 +1,7 @@
+3.2.17RC1 2025-11-26
+=======
+* Support PHP 8.5
+
 3.2.15 2023-12-02
 =======
 * Properly fix crash in igbinary_unserialize_object_enum_case with opcache protected memory and non-constant value. (#380)

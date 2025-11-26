@@ -31,10 +31,10 @@ memcached or similar memory based storages for serialized data.</description>
   <email>tandre@php.net</email>
   <active>yes</active>
  </lead>
- <date>2025-10-05</date>
+ <date>2025-11-26</date>
  <time>17:00:00</time>
  <version>
-  <release>3.2.17dev</release>
+  <release>3.2.17RC1</release>
   <api>1.4.0</api>
  </version>
  <stability>
@@ -43,7 +43,7 @@ memcached or similar memory based storages for serialized data.</description>
  </stability>
  <license uri="https://github.com/igbinary/igbinary/blob/master/COPYING">BSD-3-Clause</license>
  <notes>
-* Fix test for 8.5
+* Support PHP 8.5
 * Fix some Windows builds
 * Remove php_smart_string.h usage
  </notes>
