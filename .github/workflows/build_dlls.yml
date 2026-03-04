@@ -46,7 +46,7 @@ jobs:
                 $process = Start-Process -FilePath cmd.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
       - name: Setup PHP
         id: setup-php
-        uses: php/setup-php-sdk@v0.11
+        uses: php/setup-php-sdk@v0.12
         with:
           version: ${{matrix.version.php}}
           arch: ${{matrix.arch}}
