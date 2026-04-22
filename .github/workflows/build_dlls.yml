@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{matrix.version.os}}
     steps:
       - name: Checkout igbinary
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Install VC15 component
         if: ${{ matrix.version.php == '7.4' || matrix.version.php == '7.3' || matrix.version.php == '7.2' }}
         shell: pwsh

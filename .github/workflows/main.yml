@@ -60,7 +60,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Runs a single command using the runners shell
       - name: Build and test in docker
@@ -93,7 +93,7 @@ jobs:
     runs-on: ${{matrix.version.os}}
     steps:
       - name: Checkout igbinary
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
       - name: Install VC15 component
         if: ${{ matrix.version.php == '7.4' || matrix.version.php == '7.3' || matrix.version.php == '7.2' }}
         shell: pwsh
