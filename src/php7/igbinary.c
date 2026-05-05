@@ -2601,7 +2601,7 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
 			zend_error(E_WARNING, "igbinary_unserialize_array: end-of-data");
 cleanup:
-			zval_dtor(z);
+			zval_ptr_dtor_nogc(z);
 			ZVAL_NULL(z);
 			return 1;
 		}
@@ -2759,7 +2759,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
 			zend_error(E_WARNING, "igbinary_unserialize_object_properties: end-of-data");
-			zval_dtor(z);
+			zval_ptr_dtor_nogc(z);
 			ZVAL_NULL(z);
 			return 1;
 		}
@@ -2778,13 +2778,13 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			{
 				zend_long key_index = 0;
 				if (UNEXPECTED(igbinary_unserialize_long(igsd, key_type, &key_index))) {
-					zval_dtor(z);
+					zval_ptr_dtor_nogc(z);
 					ZVAL_UNDEF(z);
 					return 1;
 				}
 				key_str = zend_long_to_str(key_index);
 				if (UNEXPECTED(key_str == NULL)) {
-					zval_dtor(z);
+					zval_ptr_dtor_nogc(z);
 					ZVAL_UNDEF(z);
 					return 1;
 				}
@@ -2795,7 +2795,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			case igbinary_type_string_id32:
 				key_str = igbinary_unserialize_string(igsd, key_type);
 				if (UNEXPECTED(key_str == NULL)) {
-					zval_dtor(z);
+					zval_ptr_dtor_nogc(z);
 					ZVAL_UNDEF(z);
 					return 1;
 				}
@@ -2806,7 +2806,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			case igbinary_type_string64:
 				key_str = igbinary_unserialize_chararray(igsd, key_type, 1);
 				if (UNEXPECTED(key_str == NULL)) {
-					zval_dtor(z);
+					zval_ptr_dtor_nogc(z);
 					ZVAL_UNDEF(z);
 					return 1;
 				}
@@ -2818,7 +2818,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 				continue;  /* Skip unserializing this element, serialized with no value. In C, this applies to loop, not switch. */
 			default:
 				zend_error(E_WARNING, "igbinary_unserialize_object_properties: unknown key type '%02x', position %zu", key_type, (size_t)IGB_BUFFER_OFFSET(igsd));
-				zval_dtor(z);
+				zval_ptr_dtor_nogc(z);
 				ZVAL_UNDEF(z);
 				return 1;
 		}
