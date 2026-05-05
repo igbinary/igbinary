@@ -100,6 +100,10 @@ memcached or similar memory based storages for serialized data.</description>
     <file name="__serialize_020.phpt" role="test" />
     <file name="__serialize_021.phpt" role="test" />
     <file name="__serialize_022.phpt" role="test" />
+    <file name="__serialize_023.phpt" role="test" />
+    <file name="__serialize_024.phpt" role="test" />
+    <file name="__serialize_025.phpt" role="test" />
+    <file name="__serialize_026.phpt" role="test" />
     <file name="igbinary_001.phpt" role="test" />
     <file name="igbinary_002.phpt" role="test" />
     <file name="igbinary_003.phpt" role="test" />
@@ -213,6 +217,8 @@ memcached or similar memory based storages for serialized data.</description>
     <file name="igbinary_097.phpt" role="test" />
     <file name="igbinary_098.phpt" role="test" />
     <file name="igbinary_099.phpt" role="test" />
+    <file name="igbinary_100.phpt" role="test" />
+    <file name="igbinary_101.phpt" role="test" />
     <file name="igbinary_bug54662.phpt" role="test" />
     <file name="igbinary_bug72134.phpt" role="test" />
     <file name="igbinary_enums_1.phpt" role="test" />
