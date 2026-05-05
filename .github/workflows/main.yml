@@ -69,59 +69,24 @@ jobs:
       - name: Build and test in docker again with valgrind
         run: bash ci/test_dockerized_valgrind.sh ${{ matrix.PHP_VERSION }} ${{ matrix.PHP_VERSION_FULL }} ${{ matrix.DOCKER_ARCHITECTURE }}
 
+  # Build and test on Windows
   windows:
-    defaults:
-      run:
-        shell: cmd
     strategy:
-      fail-fast: false
       matrix:
-          version:
-          # windows 2019 action runner is deprecated https://github.com/actions/runner-images/issues/12045
-          - { os: windows-2022, php: "7.2" }
-          - { os: windows-2022, php: "7.3" }
-          - { os: windows-2022, php: "7.4" }
-          - { os: windows-2022, php: "8.0" }
-          - { os: windows-2022, php: "8.1" }
-          - { os: windows-2022, php: "8.2" }
-          - { os: windows-2022, php: "8.3" }
-          - { os: windows-2022, php: "8.4" }
-          - { os: windows-2022, php: "8.5" }
-          arch: [x64]
-          ts: [nts, ts]
-    # https://github.com/php/setup-php-sdk?tab=readme-ov-file#inputs
-    runs-on: ${{matrix.version.os}}
+        php-version: ["7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+        arch: [x64, x86]
+        ts: [nts, ts]
+    runs-on: windows-2022
     steps:
-      - name: Checkout igbinary
+      - name: Checkout
         uses: actions/checkout@v6
-      - name: Install VC15 component
-        if: ${{ matrix.version.php == '7.4' || matrix.version.php == '7.3' || matrix.version.php == '7.2' }}
-        shell: pwsh
-        run: |
-                Set-Location "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
-                $installPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
-                $component = "Microsoft.VisualStudio.Component.VC.v141.x86.x64"
-                $args = ('/c', "vs_installer.exe", 'modify', '--installPath', "`"$installPath`"", '--add', $component, '--quiet', '--norestart', '--nocache')
-                $process = Start-Process -FilePath cmd.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
-      - name: Setup PHP
-        id: setup-php
-        uses: php/setup-php-sdk@v0.12
+      # The builder handles building, testing and artifact packaging/upload automatically
+      - name: Build and test the extension
+        uses: php/php-windows-builder/extension@v1
         with:
-          version: ${{matrix.version.php}}
-          arch: ${{matrix.arch}}
-          ts: ${{matrix.ts}}
-      - name: Enable Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{matrix.arch}}
-          toolset: ${{steps.setup-php.outputs.toolset}}
-      - name: phpize
-        run: phpize
-      - name: configure
-        run: configure --enable-igbinary --enable-debug-pack --with-prefix=${{steps.setup-php.outputs.prefix}}
-      - name: make
-        run: nmake
-      # Run tests, failing if they fail. REPORT_EXIT_STATUS=1 is the default for tests in php 7.2+
-      - name: test
-        run: nmake test TESTS="--show-diff tests"
-      # Don't build DLLs for development commits or PRs.
+          php-version: ${{ matrix.php-version }}
+          arch: ${{ matrix.arch }}
+          ts: ${{ matrix.ts }}
+          args: --enable-igbinary --enable-debug-pack
+          run-tests: true
+          test-runner-args: "--show-diff tests"
