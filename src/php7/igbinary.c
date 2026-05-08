@@ -23,6 +23,7 @@
 #include "Zend/zend_compile.h" /* ZEND_ACC_NOT_SERIALIZABLE */
 #include "ext/standard/info.h"
 #include "ext/standard/php_var.h"
+#include <inttypes.h> /* PRId32/PRId64 used by ZEND_LONG_FMT */
 
 #if PHP_VERSION_ID >= 80100
 #include "Zend/zend_enum.h"
@@ -273,6 +274,8 @@ struct igbinary_unserialize_data {
 #if PHP_VERSION_ID >= 70400
 	HashTable *ref_props; /**< objects&data for calls to __unserialize/__wakeup */
 #endif
+	zend_long cur_depth;            /**< current recursion depth in igbinary_unserialize_zval */
+	zend_long max_depth;            /**< snapshot of unserialize_max_depth ini at entry */
 };
 
 #define IGB_REF_VAL_2(igsd, n)	((igsd)->references[(n)])
@@ -330,7 +333,8 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 zend_always_inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags);
 static int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce);
 
-static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
+zend_always_inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
+static int igbinary_unserialize_zval_inner(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
 /* }}} */
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO_EX(arginfo_igbinary_serialize, 0, 0, 1)
@@ -2044,8 +2048,19 @@ static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z
 /* {{{ igbinary_unserialize_data_init */
 /** Inits igbinary_unserialize_data. */
 inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_data *igsd) {
-	struct igbinary_value_ref *references = emalloc(sizeof(igsd->references[0]) * 4);
+	struct igbinary_value_ref *references;
 	zend_string **strings;
+	/* Initialize the recursion guard fields before any path that can fail, */
+	/* so callers that ignore the return value still see defined values. */
+	igsd->cur_depth = 0;
+#if PHP_VERSION_ID >= 70400
+	igsd->max_depth = zend_ini_long((char *)"unserialize_max_depth", sizeof("unserialize_max_depth") - 1, 0);
+#else
+	/* unserialize_max_depth ini was added in PHP 7.4. */
+	/* Use the same default cap to keep the recursion guard active on older builds. */
+	igsd->max_depth = 4096;
+#endif
+	references = emalloc(sizeof(igsd->references[0]) * 4);
 	if (UNEXPECTED(references == NULL)) {
 		return 1;
 	}
@@ -3425,8 +3440,27 @@ zend_always_inline static int igbinary_unserialize_ref(struct igbinary_unseriali
 }
 /* }}} */
 /* {{{ igbinary_unserialize_zval */
-/** Unserialize a zval of any serializable type (zval is PHP's internal representation of a value). */
-static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
+/** Unserialize a zval of any serializable type (zval is PHP's internal representation of a value).
+ *  Recursion-depth wrapper -- enforces the unserialize_max_depth ini setting before
+ *  delegating to igbinary_unserialize_zval_inner, mirroring the protection PHP core's
+ *  unserialize() applies via php_var_unserialize. */
+zend_always_inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
+	int ret;
+	if (UNEXPECTED(igsd->cur_depth >= igsd->max_depth && igsd->max_depth > 0)) {
+		php_error_docref(NULL, E_WARNING,
+			"Maximum depth of " ZEND_LONG_FMT " exceeded. "
+			"The depth limit can be changed using the unserialize_max_depth ini setting",
+			igsd->max_depth);
+		return 1;
+	}
+	igsd->cur_depth++;
+	ret = igbinary_unserialize_zval_inner(igsd, z, flags);
+	igsd->cur_depth--;
+	return ret;
+}
+/* }}} */
+/* {{{ igbinary_unserialize_zval_inner */
+static int igbinary_unserialize_zval_inner(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
 	enum igbinary_type t;
 
 	zend_long tmp_long;
