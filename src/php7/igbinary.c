@@ -23,7 +23,6 @@
 #include "Zend/zend_compile.h" /* ZEND_ACC_NOT_SERIALIZABLE */
 #include "ext/standard/info.h"
 #include "ext/standard/php_var.h"
-#include "ext/standard/basic_functions.h" /* BG(unserialize_max_depth) */
 #include <inttypes.h> /* PRId32/PRId64 used by ZEND_LONG_FMT */
 
 #if PHP_VERSION_ID >= 80100
@@ -2055,7 +2054,7 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 	/* so callers that ignore the return value still see defined values. */
 	igsd->cur_depth = 0;
 #if PHP_VERSION_ID >= 70400
-	igsd->max_depth = BG(unserialize_max_depth);
+	igsd->max_depth = zend_ini_long((char *)"unserialize_max_depth", sizeof("unserialize_max_depth") - 1, 0);
 #else
 	/* unserialize_max_depth ini was added in PHP 7.4. */
 	/* Use the same default cap to keep the recursion guard active on older builds. */
