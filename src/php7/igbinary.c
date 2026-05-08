@@ -24,6 +24,7 @@
 #include "ext/standard/info.h"
 #include "ext/standard/php_var.h"
 #include "ext/standard/basic_functions.h" /* BG(unserialize_max_depth) */
+#include <inttypes.h> /* PRId32/PRId64 used by ZEND_LONG_FMT */
 
 #if PHP_VERSION_ID >= 80100
 #include "Zend/zend_enum.h"

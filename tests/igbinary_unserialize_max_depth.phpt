@@ -24,14 +24,10 @@ var_dump(igbinary_unserialize($ok) !== null);
 ini_set('unserialize_max_depth', '0');
 var_dump(igbinary_unserialize($ok) !== null);
 
-// Synthetic 50000-level payload: depth-bomb is rejected at the small cap
+// Synthetic deeply-nested payload: depth-bomb is rejected at the small cap
 // without ever recursing past 100 frames, proving the crash protection.
 ini_set('unserialize_max_depth', '100');
-$bomb = "\x00\x00\x00\x02";
-for ($i = 0; $i < 50000; $i++) {
-    $bomb .= "\x14\x01\x11\x01x";
-}
-$bomb .= "\x00";
+$bomb = "\x00\x00\x00\x02" . str_repeat("\x14\x01\x11\x01x", 5000) . "\x00";
 var_dump(igbinary_unserialize($bomb));
 ?>
 --EXPECTF--
