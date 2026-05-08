@@ -333,7 +333,7 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 zend_always_inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags);
 static int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce);
 
-static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
+zend_always_inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
 static int igbinary_unserialize_zval_inner(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
 /* }}} */
 /* {{{ arginfo */
@@ -3444,15 +3444,13 @@ zend_always_inline static int igbinary_unserialize_ref(struct igbinary_unseriali
  *  Recursion-depth wrapper -- enforces the unserialize_max_depth ini setting before
  *  delegating to igbinary_unserialize_zval_inner, mirroring the protection PHP core's
  *  unserialize() applies via php_var_unserialize. */
-static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
+zend_always_inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
 	int ret;
-	if (igsd->max_depth > 0 && igsd->cur_depth >= igsd->max_depth) {
-		/* Cast to (long) and use %ld so this builds on Windows without */
-		/* needing <inttypes.h>, which igbinary intentionally skips there. */
+	if (UNEXPECTED(igsd->cur_depth >= igsd->max_depth && igsd->max_depth > 0)) {
 		php_error_docref(NULL, E_WARNING,
-			"Maximum depth of %ld exceeded. "
+			"Maximum depth of " ZEND_LONG_FMT " exceeded. "
 			"The depth limit can be changed using the unserialize_max_depth ini setting",
-			(long)igsd->max_depth);
+			igsd->max_depth);
 		return 1;
 	}
 	igsd->cur_depth++;
