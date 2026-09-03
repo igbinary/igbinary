@@ -48,6 +48,14 @@ class S implements SessionHandlerInterface {
         return true;
     }
 
+    public function create_sid(): string {
+        return "foo" . (string)rand();
+    }
+
+    public function validateId($key): bool {
+        return TRUE;
+    }
+
     // > Returns the number of deleted sessions on success, or false on failure.
     // > Note this value is returned internally to PHP for processing.
     public function gc($time): int {
