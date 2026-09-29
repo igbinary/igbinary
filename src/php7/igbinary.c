@@ -44,6 +44,7 @@
 #if PHP_VERSION_ID < 70300
 #define zend_string_efree(s) zend_string_release((s))
 #define GC_ADDREF(p) (++GC_REFCOUNT((p)))
+#define GC_DELREF(p) (--GC_REFCOUNT((p)))
 #endif
 
 #if defined(HAVE_APCU_SUPPORT)
@@ -1408,6 +1409,8 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	uint32_t n;
 	zval *d;
 	zval *z_original;
+	HashTable *h_held = NULL;
+	int r = 1;
 
 	zend_string *key;
 	zend_long key_index;
@@ -1437,21 +1440,32 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 				return ref_ser;
 			}
 		}
+		/* Hold a reference to the array while walking it, like serialize() does:
+		 * a hook (__serialize, __sleep, Serializable::serialize) that appends to it
+		 * through a PHP reference must separate it instead of reallocating it in place. */
+		if (Z_REFCOUNTED_P(z)) {
+			h_held = h;
+			GC_ADDREF(h_held);
+		}
 	}
 
 	if (n <= 0xff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, igbinary_type_array8, (uint8_t)n));
+		if (UNEXPECTED(igbinary_serialize8_and_8(igsd, igbinary_type_array8, (uint8_t)n))) {
+			goto cleanup;
+		}
 
 		if (n == 0) {
-			if (object) {
-				zend_release_properties(h);
-			}
-			return 0;
+			r = 0;
+			goto cleanup;
 		}
 	} else if (n <= 0xffff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_array16, (uint16_t)n));
+		if (UNEXPECTED(igbinary_serialize8_and_16(igsd, igbinary_type_array16, (uint16_t)n))) {
+			goto cleanup;
+		}
 	} else {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array32, n));
+		if (UNEXPECTED(igbinary_serialize8_and_32(igsd, igbinary_type_array32, n))) {
+			goto cleanup;
+		}
 	}
 
 	/* serialize properties. */
@@ -1470,27 +1484,40 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 			/* This is an undefined declared typed property of an object. */
 			/* This can't be a value or a reference in an array - except maybe for $GLOBALS, which has other issues. */
 			ZEND_ASSERT(!serialize_props);
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_null(igsd));
+			if (UNEXPECTED(igbinary_serialize_null(igsd))) {
+				goto cleanup;
+			}
 			continue;
 		}
 
 		if (key == NULL) {
 			/* Key is numeric */
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_long(igsd, key_index));
+			if (UNEXPECTED(igbinary_serialize_long(igsd, key_index))) {
+				goto cleanup;
+			}
 		} else {
 			/* Key is string */
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_string(igsd, key));
+			if (UNEXPECTED(igbinary_serialize_string(igsd, key))) {
+				goto cleanup;
+			}
 		}
 
 		/* we should still add element even if it's not OK,
 		 * since we already wrote the length of the array before */
-		RETURN_1_IF_NON_ZERO(igbinary_serialize_zval(igsd, d));
+		if (UNEXPECTED(igbinary_serialize_zval(igsd, d))) {
+			goto cleanup;
+		}
 	} ZEND_HASH_FOREACH_END();
+	r = 0;
+
+cleanup:
 	if (object) {
 		zend_release_properties(h);
+	} else if (h_held != NULL && GC_DELREF(h_held) == 0) {
+		zend_array_destroy(h_held);
 	}
 
-	return 0;
+	return r;
 }
 /* }}} */
 /* {{{ igbinary_serialize_array_ref */
