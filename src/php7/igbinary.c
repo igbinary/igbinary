@@ -276,7 +276,7 @@ struct igbinary_unserialize_data {
 #if PHP_VERSION_ID >= 70400
 	HashTable *ref_props; /**< objects&data for calls to __unserialize/__wakeup */
 #endif
-	zend_long cur_depth;            /**< current recursion depth in igbinary_unserialize_zval */
+	zend_long cur_depth;            /**< current depth of nested arrays and objects */
 	zend_long max_depth;            /**< snapshot of unserialize_max_depth ini at entry */
 };
 
@@ -345,8 +345,7 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 zend_always_inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags);
 static int igbinary_unserialize_object_ser(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, zend_class_entry *ce);
 
-zend_always_inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
-static int igbinary_unserialize_zval_inner(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
+static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags);
 /* }}} */
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO_EX(arginfo_igbinary_serialize, 0, 0, 1)
@@ -2655,6 +2654,20 @@ inline static zend_string *igbinary_unserialize_chararray(struct igbinary_unseri
 	return zstr;
 }
 /* }}} */
+/* {{{ igbinary_unserialize_enter_nested */
+/** Accounts for one more level of nested arrays or objects, like process_nested_array_data() and process_nested_object_data() in ext/standard/var_unserializer.re. */
+static zend_always_inline int igbinary_unserialize_enter_nested(struct igbinary_unserialize_data *igsd) {
+	if (UNEXPECTED(igsd->max_depth > 0 && igsd->cur_depth >= igsd->max_depth)) {
+		php_error_docref(NULL, E_WARNING,
+			"Maximum depth of " ZEND_LONG_FMT " exceeded. "
+			"The depth limit can be changed using the unserialize_max_depth ini setting",
+			igsd->max_depth);
+		return 1;
+	}
+	igsd->cur_depth++;
+	return 0;
+}
+/* }}} */
 /* {{{ igbinary_unserialize_array */
 /** Unserializes a PHP array. */
 zend_always_inline static int igbinary_unserialize_array(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, int flags, zend_bool create_ref) {
@@ -2728,6 +2741,11 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 	if (IGB_NEEDS_MORE_DATA(igsd, n)) {
 		zend_error(E_WARNING, "igbinary_unserialize_array: data size %zu smaller that requested array length %zu.", (size_t)IGB_REMAINING_BYTES(igsd), (size_t)n);
 		return 1;
+	}
+
+	/* The depth is not restored on failure: igbinary_unserialize() gives up on the first error */
+	if (create_ref) {
+		RETURN_1_IF_NON_ZERO(igbinary_unserialize_enter_nested(igsd));
 	}
 
 	zval *z_deref = z;
@@ -2860,6 +2878,10 @@ cleanup:
 		if (UNEXPECTED(igbinary_unserialize_zval(igsd, vp, WANT_CLEAR))) {
 			return 1;
 		}
+	}
+
+	if (create_ref) {
+		igsd->cur_depth--;
 	}
 
 	return 0;
@@ -3393,6 +3415,10 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 		case igbinary_type_array16:
 		case igbinary_type_array32:
 		{
+			if (UNEXPECTED(igbinary_unserialize_enter_nested(igsd))) {
+				r = 1;
+				break;
+			}
 			if (UNEXPECTED(object_init_ex(z, ce) != SUCCESS)) {
 				php_error_docref(NULL, E_NOTICE, "igbinary unable to create object for class entry");
 				r = 1;
@@ -3430,6 +3456,7 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 					ZVAL_DEREF(z);
 					ZEND_ASSERT(Z_TYPE_P(z) == IS_OBJECT);
 					igsd_defer_unserialize(igsd, Z_OBJ_P(z), param);
+					igsd->cur_depth--;
 					return result;
 				}
 #endif
@@ -3445,6 +3472,7 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 			}
 
 			r = igbinary_unserialize_object_properties(igsd, t, z, ce);
+			igsd->cur_depth--;
 			break;
 		}
 		case igbinary_type_object_ser8:
@@ -3652,26 +3680,8 @@ zend_always_inline static int igbinary_unserialize_ref(struct igbinary_unseriali
 /* }}} */
 /* {{{ igbinary_unserialize_zval */
 /** Unserialize a zval of any serializable type (zval is PHP's internal representation of a value).
- *  Recursion-depth wrapper -- enforces the unserialize_max_depth ini setting before
- *  delegating to igbinary_unserialize_zval_inner, mirroring the protection PHP core's
- *  unserialize() applies via php_var_unserialize. */
-zend_always_inline static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
-	int ret;
-	if (UNEXPECTED(igsd->cur_depth >= igsd->max_depth && igsd->max_depth > 0)) {
-		php_error_docref(NULL, E_WARNING,
-			"Maximum depth of " ZEND_LONG_FMT " exceeded. "
-			"The depth limit can be changed using the unserialize_max_depth ini setting",
-			igsd->max_depth);
-		return 1;
-	}
-	igsd->cur_depth++;
-	ret = igbinary_unserialize_zval_inner(igsd, z, flags);
-	igsd->cur_depth--;
-	return ret;
-}
-/* }}} */
-/* {{{ igbinary_unserialize_zval_inner */
-static int igbinary_unserialize_zval_inner(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
+ *  The unserialize_max_depth ini setting is enforced when entering arrays and objects, like unserialize() does. */
+static int igbinary_unserialize_zval(struct igbinary_unserialize_data *igsd, zval *const z, int flags) {
 	enum igbinary_type t;
 
 	zend_long tmp_long;
@@ -3687,6 +3697,11 @@ static int igbinary_unserialize_zval_inner(struct igbinary_unserialize_data *igs
 
 	switch (t) {
 		case igbinary_type_ref:
+			/* igbinary_serialize() never emits a reference to a reference: rejecting it keeps the recursion bounded by the depth of arrays and objects */
+			if (UNEXPECTED(!IGB_NEEDS_MORE_DATA(igsd, 1) && igsd->buffer_ptr[0] == igbinary_type_ref)) {
+				zend_error(E_WARNING, "igbinary_unserialize_zval: unexpected reference to a reference, position %zu", (size_t)IGB_BUFFER_OFFSET(igsd));
+				return 1;
+			}
 			if (UNEXPECTED(igbinary_unserialize_zval(igsd, z, WANT_REF))) {
 				return 1;
 			}
