@@ -681,8 +681,12 @@ static int igbinary_finish_deferred_calls(struct igbinary_unserialize_data *igsd
 			if (!delayed_call_failed) {
 				zval retval; /* return value of __wakeup */
 				zval rval;
+				int call_result;
 				ZVAL_OBJ(&rval, obj);
-				if (UNEXPECTED(call_user_function(CG(function_table), &rval, &wakeup_name, &retval, 0, 0) == FAILURE || Z_ISUNDEF(retval))) {
+				BG(serialize_lock)++;
+				call_result = call_user_function(CG(function_table), &rval, &wakeup_name, &retval, 0, 0);
+				BG(serialize_lock)--;
+				if (UNEXPECTED(call_result == FAILURE || Z_ISUNDEF(retval))) {
 					delayed_call_failed = 1;
 					GC_ADD_FLAGS(obj, IS_OBJ_DESTRUCTOR_CALLED);
 				}
@@ -860,6 +864,7 @@ static int igbinary_unserialize_with_options(const uint8_t *buf, size_t buf_len,
 	if (max_depth >= 0) {
 		igsd.max_depth = max_depth;
 	}
+	ZVAL_NULL(z);
 
 	igsd.buffer = buf;
 	igsd.buffer_ptr = buf;
@@ -896,6 +901,12 @@ static int igbinary_unserialize_with_options(const uint8_t *buf, size_t buf_len,
 	}
 cleanup:
 	igbinary_unserialize_data_deinit(&igsd);
+
+	if (UNEXPECTED(ret)) {
+		/* Release the partially unserialized value after igbinary_unserialize_data_deinit() prevented calls to the destructors of objects that weren't woken up */
+		zval_ptr_dtor(z);
+		ZVAL_NULL(z);
+	}
 
 	return ret;
 }
@@ -997,10 +1008,9 @@ PHP_FUNCTION(igbinary_unserialize) {
 
 	if (string_len <= 0) {
 		RETVAL_FALSE;
-	} else if (igbinary_unserialize_with_options((uint8_t *)string, string_len, return_value, allowed_classes, max_depth) != 0) {
-		/* FIXME: is this a good place? a catch all */
-		zval_ptr_dtor(return_value);
-		RETVAL_NULL();
+	} else {
+		/* return_value is null on failure */
+		igbinary_unserialize_with_options((uint8_t *)string, string_len, return_value, allowed_classes, max_depth);
 	}
 
 	if (allowed_classes != NULL) {
@@ -1104,6 +1114,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 	igsd.buffer = (const uint8_t *)val;
 	igsd.buffer_ptr = igsd.buffer;
 	igsd.buffer_end = igsd.buffer + vallen;
+	ZVAL_NULL(&z);
 
 	if (UNEXPECTED(igbinary_unserialize_header(&igsd))) {
 		ret = 1;
@@ -1122,6 +1133,7 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 deinit:
 	igbinary_unserialize_data_deinit(&igsd);
 	if (UNEXPECTED(ret)) {
+		zval_ptr_dtor(&z);
 		return FAILURE;
 	}
 
@@ -2435,20 +2447,24 @@ inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_
 	}
 	if (igsd->deferred) {
 		struct deferred_call *calls = igsd->deferred;
+		if (!igsd->deferred_finished) {
+			/* Unserialization failed: don't call the destructor of objects whose __wakeup() or __unserialize() won't be called. */
+			/* Partially unserialized values are only released by the caller or by free_deferred_dtors() below, so the objects are still alive. */
+			uint32_t i;
+			uint32_t n = igsd->deferred_count;
+			for (i = 0; i < n; i++) {
+				struct deferred_call *call = &calls[i];
 #if PHP_VERSION_ID >= 70400
-		uint32_t i;
-		uint32_t n = igsd->deferred_count;
-		for (i = 0; i < n; i++) {
-			struct deferred_call *call = &calls[i];
-			if (call->is_unserialize) {
-				if (!igsd->deferred_finished) {
+				if (call->is_unserialize) {
 					struct deferred_unserialize_call *unserialize_call = &call->data.unserialize;
 					GC_ADD_FLAGS(unserialize_call->object, IS_OBJ_DESTRUCTOR_CALLED);
 					zval_ptr_dtor(&unserialize_call->param);
+					continue;
 				}
+#endif
+				GC_ADD_FLAGS(call->data.wakeup, IS_OBJ_DESTRUCTOR_CALLED);
 			}
 		}
-#endif
 		efree(calls);
 	}
 	free_deferred_dtors(&igsd->deferred_dtor_tracker);
@@ -2948,8 +2964,8 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
 			zend_error(E_WARNING, "igbinary_unserialize_array: end-of-data");
 cleanup:
-			zval_ptr_dtor_nogc(z);
-			ZVAL_NULL(z);
+			/* Don't release the partially unserialized array here: it can contain objects with pending calls to __wakeup() or __unserialize(). */
+			/* It is released by its owner after igbinary_unserialize_data_deinit() marked those objects as destructed. */
 			return 1;
 		}
 
@@ -3049,6 +3065,17 @@ cleanup:
 	return 0;
 }
 /* }}} */
+#if PHP_VERSION_ID >= 70400
+/* {{{ igbinary_unserialize_restore_prop_default */
+/** Restores the default value of a typed property after failing to unserialize its value. Mirrors var_restore_prop_default() in ext/standard/var_unserializer.re. */
+static void igbinary_unserialize_restore_prop_default(struct igbinary_unserialize_data *igsd, zend_object *obj, zend_property_info *info, zval *data) {
+	zval *default_value = &obj->ce->default_properties_table[OBJ_PROP_TO_NUM(info->offset)];
+	/* Release the value after the calls to __wakeup() or __unserialize(), like other values replaced during unserialization */
+	igsd_defer_dtor(&igsd->deferred_dtor_tracker, data);
+	ZVAL_COPY_OR_DUP_PROP(data, default_value);
+}
+/* }}} */
+#endif
 /* {{{ igbinary_unserialize_object_properties */
 /** Unserializes the array of object properties and adds those to the object z. */
 inline static int igbinary_unserialize_object_properties(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *const z, const zend_class_entry *ce) {
@@ -3110,8 +3137,6 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
 			zend_error(E_WARNING, "igbinary_unserialize_object_properties: end-of-data");
-			zval_ptr_dtor_nogc(z);
-			ZVAL_NULL(z);
 			return 1;
 		}
 
@@ -3129,14 +3154,10 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			{
 				zend_long key_index = 0;
 				if (UNEXPECTED(igbinary_unserialize_long(igsd, key_type, &key_index))) {
-					zval_ptr_dtor_nogc(z);
-					ZVAL_UNDEF(z);
 					return 1;
 				}
 				key_str = zend_long_to_str(key_index);
 				if (UNEXPECTED(key_str == NULL)) {
-					zval_ptr_dtor_nogc(z);
-					ZVAL_UNDEF(z);
 					return 1;
 				}
 				break;
@@ -3146,8 +3167,6 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			case igbinary_type_string_id32:
 				key_str = igbinary_unserialize_string(igsd, key_type);
 				if (UNEXPECTED(key_str == NULL)) {
-					zval_ptr_dtor_nogc(z);
-					ZVAL_UNDEF(z);
 					return 1;
 				}
 				break;
@@ -3157,8 +3176,6 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 			case igbinary_type_string64:
 				key_str = igbinary_unserialize_chararray(igsd, key_type, 1);
 				if (UNEXPECTED(key_str == NULL)) {
-					zval_ptr_dtor_nogc(z);
-					ZVAL_UNDEF(z);
 					return 1;
 				}
 				break;
@@ -3169,8 +3186,6 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 				continue;  /* Skip unserializing this element, serialized with no value. In C, this applies to loop, not switch. */
 			default:
 				zend_error(E_WARNING, "igbinary_unserialize_object_properties: unknown key type '%02x', position %zu", key_type, (size_t)IGB_BUFFER_OFFSET(igsd));
-				zval_ptr_dtor_nogc(z);
-				ZVAL_UNDEF(z);
 				return 1;
 		}
 
@@ -3294,22 +3309,17 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 
 		if (UNEXPECTED(igbinary_unserialize_zval(igsd, vp, WANT_CLEAR))) {
 #if PHP_VERSION_ID >= 70400
-			if (info && Z_ISREF_P(vp)) {
-				/* Add type source even if we failed to unserialize.
-				 * The data is still stored in the property. */
-				ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(vp), info);
+			if (info) {
+				/* The partially unserialized value may violate the type of the property */
+				igbinary_unserialize_restore_prop_default(igsd, Z_OBJ_P(z_deref), info, vp);
 			}
 #endif
-			/* Unserializing a property into this zval has failed. */
-			/* zval_ptr_dtor(z); */
-			/* zval_ptr_dtor(vp); */
 			return 1;
 		}
 #if PHP_VERSION_ID >= 70400
 		if (UNEXPECTED(info)) {
 			if (!zend_verify_prop_assignable_by_ref(info, vp, /* strict */ 1)) {
-				zval_ptr_dtor(vp);
-				ZVAL_UNDEF(vp);
+				igbinary_unserialize_restore_prop_default(igsd, Z_OBJ_P(z_deref), info, vp);
 				return 1;
 			}
 			if (Z_ISREF_P(vp)) {
@@ -3666,14 +3676,20 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 					}
 					/* Unserialize the array as an array for a deferred call to __unserialize */
 					zval param;
-					int result;
 					zend_string_release(class_name);
-					result = igbinary_unserialize_array(igsd, t, &param, 0, false);
+					ZVAL_UNDEF(&param);
+					r = igbinary_unserialize_array(igsd, t, &param, 0, false);
 					ZVAL_DEREF(z);
 					ZEND_ASSERT(Z_TYPE_P(z) == IS_OBJECT);
+					if (UNEXPECTED(r)) {
+						/* Like unserialize(), don't call the destructor of an object that won't be unserialized */
+						GC_ADD_FLAGS(Z_OBJ_P(z), IS_OBJ_DESTRUCTOR_CALLED);
+						igsd_defer_dtor(&igsd->deferred_dtor_tracker, &param);
+						return 1;
+					}
 					igsd_defer_unserialize(igsd, Z_OBJ_P(z), param);
 					igsd->cur_depth--;
-					return result;
+					return 0;
 				}
 #endif
 			}
@@ -3688,6 +3704,12 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 			}
 
 			r = igbinary_unserialize_object_properties(igsd, t, z, ce);
+			if (UNEXPECTED(r) && !incomplete_class && zend_hash_str_exists(&ce->function_table, "__wakeup", sizeof("__wakeup") - 1)) {
+				/* Like unserialize(), don't call the destructor of an object whose __wakeup() won't be called */
+				zval *z_deref = z;
+				ZVAL_DEREF(z_deref);
+				GC_ADD_FLAGS(Z_OBJ_P(z_deref), IS_OBJ_DESTRUCTOR_CALLED);
+			}
 			igsd->cur_depth--;
 			break;
 		}
