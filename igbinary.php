@@ -66,8 +66,12 @@ function igbinary_serialize($value);
  * then NULL is returned and an E_WARNING is issued.
  *
  * @param string $str The serialized string.
+ * @param array $options The same options as unserialize():
+ *   - "allowed_classes": an array of the names of the classes to instantiate, false to instantiate none, or true to instantiate all (the default).
+ *     The other classes are unserialized as __PHP_Incomplete_Class objects. Enums are not affected.
+ *   - "max_depth": the maximum depth of nested arrays and objects, or 0 to disable the limit. Defaults to the unserialize_max_depth ini setting.
  * @return mixed The unserialized value is returned. It can be a boolean, integer, float, string, array, object or null.
  * @link http://www.php.net/manual/en/function.unserialize.php PHP's default unserialize
  * @link https://secure.php.net/serializable Serializable interface
  */
-function igbinary_unserialize($str);
+function igbinary_unserialize($str, array $options = []);

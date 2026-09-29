@@ -31,10 +31,10 @@ $bomb = "\x00\x00\x00\x02" . str_repeat("\x14\x01\x11\x01x", 5000) . "\x00";
 var_dump(igbinary_unserialize($bomb));
 ?>
 --EXPECTF--
-Warning: igbinary_unserialize(): Maximum depth of 100 exceeded. The depth limit can be changed using the unserialize_max_depth ini setting in %s on line %d
+Warning: igbinary_unserialize(): Maximum depth of 100 exceeded. The depth limit can be changed using the max_depth igbinary_unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 NULL
 bool(true)
 bool(true)
 
-Warning: igbinary_unserialize(): Maximum depth of 100 exceeded. The depth limit can be changed using the unserialize_max_depth ini setting in %s on line %d
+Warning: igbinary_unserialize(): Maximum depth of 100 exceeded. The depth limit can be changed using the max_depth igbinary_unserialize() option or the unserialize_max_depth ini setting in %s on line %d
 NULL

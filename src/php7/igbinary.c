@@ -146,6 +146,18 @@ static bool igbinary_is_valid_class_name(zend_string *name) {
 }
 #endif
 
+#if PHP_VERSION_ID >= 80300
+# define igbinary_zval_value_name(zv) zend_zval_value_name(zv)
+#else
+# define igbinary_zval_value_name(zv) zend_zval_type_name(zv)
+#endif
+
+#if PHP_VERSION_ID >= 80000
+# define igbinary_value_error zend_value_error
+#else
+# define igbinary_value_error(...) zend_throw_error(NULL, __VA_ARGS__)
+#endif
+
 #ifdef ZEND_ACC_NOT_SERIALIZABLE
 # define IGBINARY_IS_NOT_SERIALIZABLE(ce) UNEXPECTED((ce)->ce_flags & (ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_ANON_CLASS))
 # define IGBINARY_IS_NOT_UNSERIALIZABLE(ce) IGBINARY_IS_NOT_SERIALIZABLE(ce)
@@ -311,7 +323,8 @@ struct igbinary_unserialize_data {
 	HashTable *ref_props; /**< objects&data for calls to __unserialize/__wakeup */
 #endif
 	zend_long cur_depth;            /**< current depth of nested arrays and objects */
-	zend_long max_depth;            /**< snapshot of unserialize_max_depth ini at entry */
+	zend_long max_depth;            /**< snapshot of unserialize_max_depth ini at entry, or the max_depth option */
+	HashTable *allowed_classes;     /**< lowercase names of the classes that can be instantiated, or NULL for all classes */
 };
 
 #define IGB_REF_VAL_2(igsd, n)	((igsd)->references[(n)])
@@ -361,6 +374,7 @@ static int igbinary_serialize_zval(struct igbinary_serialize_data *igsd, zval *z
 /* }}} */
 /* {{{ Unserializing functions prototypes */
 zend_always_inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_data *igsd);
+static int igbinary_unserialize_with_options(const uint8_t *buf, size_t buf_len, zval *z, HashTable *allowed_classes, zend_long max_depth);
 zend_always_inline static void igbinary_unserialize_data_deinit(struct igbinary_unserialize_data *igsd);
 
 zend_always_inline static int igbinary_unserialize_header(struct igbinary_unserialize_data *igsd);
@@ -388,6 +402,11 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_igbinary_unserialize, 0, 0, 1)
 	ZEND_ARG_INFO(0, str)
+#if PHP_VERSION_ID >= 80000
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, options, IS_ARRAY, 0, "[]")
+#else
+	ZEND_ARG_ARRAY_INFO(0, options, 0)
+#endif
 ZEND_END_ARG_INFO()
 /* }}} */
 /* {{{ igbinary_functions[] */
@@ -816,10 +835,23 @@ cleanup:
  * @return 0 on success, 1 on failure
  */
 IGBINARY_API int igbinary_unserialize(const uint8_t *buf, size_t buf_len, zval *z) {
+	return igbinary_unserialize_with_options(buf, buf_len, z, NULL, -1);
+}
+/* }}} */
+/* {{{ igbinary_unserialize_with_options */
+/**
+ * @param allowed_classes lowercase names of the classes that can be instantiated, or NULL for all classes
+ * @param max_depth maximum depth of nested arrays and objects, or -1 to use the unserialize_max_depth ini setting
+ */
+static int igbinary_unserialize_with_options(const uint8_t *buf, size_t buf_len, zval *z, HashTable *allowed_classes, zend_long max_depth) {
 	struct igbinary_unserialize_data igsd;
 	int ret = 0;
 
 	igbinary_unserialize_data_init(&igsd);
+	igsd.allowed_classes = allowed_classes;
+	if (max_depth >= 0) {
+		igsd.max_depth = max_depth;
+	}
 
 	igsd.buffer = buf;
 	igsd.buffer_ptr = buf;
@@ -860,26 +892,112 @@ cleanup:
 	return ret;
 }
 /* }}} */
-/* {{{ proto string igbinary_unserialize(mixed value) */
+/* {{{ igbinary_parse_unserialize_options */
+/** Validates the options of igbinary_unserialize(). Mirrors php_unserialize_with_options() in ext/standard/var.c. */
+static int igbinary_parse_unserialize_options(HashTable *options, HashTable **allowed_classes, zend_long *max_depth) {
+	HashTable *class_hash = NULL;
+	zval *classes = zend_hash_str_find(options, "allowed_classes", sizeof("allowed_classes") - 1);
+	zval *depth = zend_hash_str_find(options, "max_depth", sizeof("max_depth") - 1);
+
+	if (classes != NULL) {
+		ZVAL_DEREF(classes);
+		if (Z_TYPE_P(classes) != IS_ARRAY && Z_TYPE_P(classes) != IS_TRUE && Z_TYPE_P(classes) != IS_FALSE) {
+			zend_type_error("igbinary_unserialize(): Option \"allowed_classes\" must be of type array|bool, %s given", igbinary_zval_value_name(classes));
+			return FAILURE;
+		}
+		if (Z_TYPE_P(classes) != IS_TRUE) {
+			ALLOC_HASHTABLE(class_hash);
+			zend_hash_init(class_hash, Z_TYPE_P(classes) == IS_ARRAY ? zend_hash_num_elements(Z_ARRVAL_P(classes)) : 0, NULL, NULL, 0);
+		}
+		if (Z_TYPE_P(classes) == IS_ARRAY) {
+			zval *entry;
+			ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(classes), entry) {
+				zend_string *name, *lcname;
+
+				ZVAL_DEREF(entry);
+				if (UNEXPECTED(Z_TYPE_P(entry) != IS_STRING && Z_TYPE_P(entry) != IS_OBJECT)) {
+					zend_type_error("igbinary_unserialize(): Option \"allowed_classes\" must be an array of class names, %s given", igbinary_zval_value_name(entry));
+					goto failure;
+				}
+#if PHP_VERSION_ID >= 80000
+				name = zval_try_get_string(entry);
+				if (UNEXPECTED(name == NULL)) {
+					goto failure;
+				}
+#else
+				name = zval_get_string(entry);
+				if (UNEXPECTED(EG(exception))) {
+					zend_string_release(name);
+					goto failure;
+				}
+#endif
+				if (UNEXPECTED(!igbinary_is_valid_class_name(name))) {
+					igbinary_value_error("igbinary_unserialize(): Option \"allowed_classes\" must be an array of class names, \"%s\" given", ZSTR_VAL(name));
+					zend_string_release(name);
+					goto failure;
+				}
+				lcname = zend_string_tolower(name);
+				zend_hash_add_empty_element(class_hash, lcname);
+				zend_string_release(lcname);
+				zend_string_release(name);
+			} ZEND_HASH_FOREACH_END();
+		}
+	}
+
+	if (depth != NULL) {
+		ZVAL_DEREF(depth);
+		if (Z_TYPE_P(depth) != IS_LONG) {
+			zend_type_error("igbinary_unserialize(): Option \"max_depth\" must be of type int, %s given", igbinary_zval_value_name(depth));
+			goto failure;
+		}
+		if (Z_LVAL_P(depth) < 0) {
+			igbinary_value_error("igbinary_unserialize(): Option \"max_depth\" must be greater than or equal to 0");
+			goto failure;
+		}
+		*max_depth = Z_LVAL_P(depth);
+	}
+
+	*allowed_classes = class_hash;
+	return SUCCESS;
+
+failure:
+	if (class_hash != NULL) {
+		zend_hash_destroy(class_hash);
+		FREE_HASHTABLE(class_hash);
+	}
+	return FAILURE;
+}
+/* }}} */
+/* {{{ proto mixed igbinary_unserialize(string value, array options = []) */
 /**
  * @see igbinary.php for more detailed API documentation.
  */
 PHP_FUNCTION(igbinary_unserialize) {
 	char *string = NULL;
 	size_t string_len;
+	HashTable *options = NULL;
+	HashTable *allowed_classes = NULL;
+	zend_long max_depth = -1;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "s", &string, &string_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "s|h", &string, &string_len, &options) == FAILURE) {
+		RETURN_NULL();
+	}
+
+	if (options != NULL && igbinary_parse_unserialize_options(options, &allowed_classes, &max_depth) == FAILURE) {
 		RETURN_NULL();
 	}
 
 	if (string_len <= 0) {
-		RETURN_FALSE;
-	}
-
-	if (igbinary_unserialize((uint8_t *)string, string_len, return_value) != 0) {
+		RETVAL_FALSE;
+	} else if (igbinary_unserialize_with_options((uint8_t *)string, string_len, return_value, allowed_classes, max_depth) != 0) {
 		/* FIXME: is this a good place? a catch all */
 		zval_ptr_dtor(return_value);
-		RETURN_NULL();
+		RETVAL_NULL();
+	}
+
+	if (allowed_classes != NULL) {
+		zend_hash_destroy(allowed_classes);
+		FREE_HASHTABLE(allowed_classes);
 	}
 }
 /* }}} */
@@ -2281,6 +2399,7 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 #if PHP_VERSION_ID >= 70400
 	igsd->ref_props = NULL;
 #endif
+	igsd->allowed_classes = NULL;
 
 	return 0;
 }
@@ -2694,7 +2813,8 @@ static zend_always_inline int igbinary_unserialize_enter_nested(struct igbinary_
 	if (UNEXPECTED(igsd->max_depth > 0 && igsd->cur_depth >= igsd->max_depth)) {
 		php_error_docref(NULL, E_WARNING,
 			"Maximum depth of " ZEND_LONG_FMT " exceeded. "
-			"The depth limit can be changed using the unserialize_max_depth ini setting",
+			"The depth limit can be changed using the max_depth igbinary_unserialize() option "
+			"or the unserialize_max_depth ini setting",
 			igsd->max_depth);
 		return 1;
 	}
@@ -3327,6 +3447,20 @@ static int igbinary_unserialize_object_enum_case(struct igbinary_unserialize_dat
 }
 #endif
 /* }}} */
+/* {{{ igbinary_unserialize_allowed_class */
+static bool igbinary_unserialize_allowed_class(struct igbinary_unserialize_data *igsd, zend_string *class_name) {
+	zend_string *lcname;
+	bool allowed;
+
+	if (zend_hash_num_elements(igsd->allowed_classes) == 0) {
+		return false;
+	}
+	lcname = zend_string_tolower(class_name);
+	allowed = zend_hash_exists(igsd->allowed_classes, lcname);
+	zend_string_release(lcname);
+	return allowed;
+}
+/* }}} */
 /* {{{ igbinary_unserialize_invalid_class_name */
 static ZEND_COLD int igbinary_unserialize_invalid_class_name(struct igbinary_unserialize_data *igsd, zend_string *class_name) {
 	zend_error(E_WARNING, "igbinary_unserialize_object: invalid class name, position %zu", (size_t)IGB_BUFFER_OFFSET(igsd));
@@ -3377,6 +3511,18 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 #else
 		const char* user_func_name;
 #endif
+
+		/* Like unserialize(), the allowed_classes option doesn't apply to enums */
+		if (UNEXPECTED(igsd->allowed_classes != NULL)
+		 && (IGB_NEEDS_MORE_DATA(igsd, 1) || igsd->buffer_ptr[0] != igbinary_type_enum_case)
+		 && !igbinary_unserialize_allowed_class(igsd, class_name)) {
+			if (UNEXPECTED(!igbinary_is_valid_class_name(class_name))) {
+				return igbinary_unserialize_invalid_class_name(igsd, class_name);
+			}
+			incomplete_class = 1;
+			ce = PHP_IC_ENTRY;
+			break;
+		}
 
 		/* Try to find class directly */
 		BG(serialize_lock)++;
