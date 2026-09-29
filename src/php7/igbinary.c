@@ -20,6 +20,7 @@
 #include "Zend/zend_alloc.h"
 #include "Zend/zend_exceptions.h"
 #include "Zend/zend_interfaces.h"
+#include "Zend/zend_objects.h"
 #include "Zend/zend_compile.h" /* ZEND_ACC_NOT_SERIALIZABLE */
 #include "ext/standard/info.h"
 #include "ext/standard/php_var.h"
@@ -638,6 +639,10 @@ static int igbinary_finish_deferred_calls(struct igbinary_unserialize_data *igsd
 #if PHP_VERSION_ID >= 80000
 				/* Copy the parameter for __unserialize so that changes in __unserialize won't mutate the original. */
 				// ZVAL_COPY(&param, &unserialize_call->param);
+#if PHP_VERSION_ID >= 80600
+				/* Let __unserialize() overwrite the defaults of readonly properties */
+				zend_object_set_properties_reinitable(obj, true);
+#endif
 				BG(serialize_lock)++;
 				zend_call_known_instance_method_with_1_params(
 					obj->ce->__unserialize, obj, NULL, &unserialize_call->param);
@@ -646,6 +651,9 @@ static int igbinary_finish_deferred_calls(struct igbinary_unserialize_data *igsd
 					GC_ADD_FLAGS(obj, IS_OBJ_DESTRUCTOR_CALLED);
 				}
 				BG(serialize_lock)--;
+#if PHP_VERSION_ID >= 80600
+				zend_object_set_properties_reinitable(obj, false);
+#endif
 #else
 				zval retval;
 				zval zv;
