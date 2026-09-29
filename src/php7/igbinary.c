@@ -112,6 +112,40 @@ static zend_always_inline void zval_ptr_dtor_str(zval *zval_ptr)
     return 1;                     \
   }
 
+#if PHP_VERSION_ID >= 80000
+# define IGBINARY_HAS_UNSERIALIZE(ce) ((ce)->__unserialize != NULL)
+#elif PHP_VERSION_ID >= 70400
+# define IGBINARY_HAS_UNSERIALIZE(ce) zend_hash_str_exists(&(ce)->function_table, "__unserialize", sizeof("__unserialize") - 1)
+#else
+# define IGBINARY_HAS_UNSERIALIZE(ce) (0)
+#endif
+
+#if PHP_VERSION_ID >= 80000
+# define igbinary_is_valid_class_name(name) zend_is_valid_class_name(name)
+#else
+/* Copy of zend_is_valid_class_name(), which is exported since php 8.0 */
+static bool igbinary_is_valid_class_name(zend_string *name) {
+	static const uint32_t valid_chars[8] = {
+		0x00000000,
+		0x03ff0000,
+		0x97fffffe,
+		0x07fffffe,
+		0xffffffff,
+		0xffffffff,
+		0xffffffff,
+		0xffffffff,
+	};
+	size_t i;
+	for (i = 0; i < ZSTR_LEN(name); i++) {
+		unsigned char c = ZSTR_VAL(name)[i];
+		if (!(valid_chars[c >> 5] & (1u << (c & 0x1f)))) {
+			return false;
+		}
+	}
+	return true;
+}
+#endif
+
 #ifdef ZEND_ACC_NOT_SERIALIZABLE
 # define IGBINARY_IS_NOT_SERIALIZABLE(ce) UNEXPECTED((ce)->ce_flags & (ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_ANON_CLASS))
 # define IGBINARY_IS_NOT_UNSERIALIZABLE(ce) IGBINARY_IS_NOT_SERIALIZABLE(ce)
@@ -3293,6 +3327,13 @@ static int igbinary_unserialize_object_enum_case(struct igbinary_unserialize_dat
 }
 #endif
 /* }}} */
+/* {{{ igbinary_unserialize_invalid_class_name */
+static ZEND_COLD int igbinary_unserialize_invalid_class_name(struct igbinary_unserialize_data *igsd, zend_string *class_name) {
+	zend_error(E_WARNING, "igbinary_unserialize_object: invalid class name, position %zu", (size_t)IGB_BUFFER_OFFSET(igsd));
+	zend_string_release(class_name);
+	return 1;
+}
+/* }}} */
 /* {{{ igbinary_unserialize_object */
 /** Unserialize an object.
  * @see ext/standard/var_unserializer.c in the php-src repo. Parts of this code are based on that.
@@ -3322,6 +3363,11 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 		return 1;
 	}
 
+	/* Like unserialize(), don't look up runtime definition keys nor names with a leading namespace separator */
+	if (UNEXPECTED(ZSTR_LEN(class_name) == 0 || ZSTR_VAL(class_name)[0] == '\0' || ZSTR_VAL(class_name)[0] == '\\')) {
+		return igbinary_unserialize_invalid_class_name(igsd, class_name);
+	}
+
 	do {
 		zval user_func;
 		zval retval;
@@ -3333,9 +3379,19 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 #endif
 
 		/* Try to find class directly */
-		if (EXPECTED((ce = zend_lookup_class(class_name)) != NULL)) {
-			/* FIXME: lookup class may cause exception in load callback */
+		BG(serialize_lock)++;
+		ce = zend_lookup_class(class_name);
+		BG(serialize_lock)--;
+		if (EXPECTED(ce != NULL)) {
 			break;
+		}
+		if (UNEXPECTED(EG(exception))) {
+			/* The autoloader threw */
+			zend_string_release(class_name);
+			return 1;
+		}
+		if (UNEXPECTED(!igbinary_is_valid_class_name(class_name))) {
+			return igbinary_unserialize_invalid_class_name(igsd, class_name);
 		}
 
 		user_func_name = PG(unserialize_callback_func);
@@ -3357,7 +3413,10 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 		ZVAL_STRING(&user_func, user_func_name);
 #endif
 		ZVAL_STR(&args[0], class_name);
-		if (call_user_function(CG(function_table), NULL, &user_func, &retval, 1, args) != SUCCESS) {
+		BG(serialize_lock)++;
+		r = call_user_function(CG(function_table), NULL, &user_func, &retval, 1, args);
+		BG(serialize_lock)--;
+		if (r != SUCCESS) {
 			php_error_docref(NULL, E_WARNING, "defined (%s) but not found", Z_STRVAL(user_func));
 			incomplete_class = 1;
 			ce = PHP_IC_ENTRY;
@@ -3375,7 +3434,9 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 		}
 
 		/* The callback function may have defined the class */
+		BG(serialize_lock)++;
 		ce = zend_lookup_class(class_name);
+		BG(serialize_lock)--;
 		if (!ce) {
 			/* Keep using our own copy of the name: the callback may have
 			 * changed unserialize_callback_func, releasing the ini string */
@@ -3415,6 +3476,12 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 		case igbinary_type_array16:
 		case igbinary_type_array32:
 		{
+			if (UNEXPECTED(ce->serialize != NULL && !IGBINARY_HAS_UNSERIALIZE(ce))) {
+				/* Like unserialize(), only let Serializable classes be created by Serializable::unserialize() or __unserialize() */
+				zend_error(E_WARNING, "Erroneous data format for unserializing '%s'", ZSTR_VAL(ce->name));
+				r = 1;
+				break;
+			}
 			if (UNEXPECTED(igbinary_unserialize_enter_nested(igsd))) {
 				r = 1;
 				break;
@@ -3432,12 +3499,7 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 #endif
 #if PHP_VERSION_ID >= 70400
 			} else {
-#if PHP_VERSION_ID >= 80000
-				if (ce->__unserialize)
-#else
-				if (zend_hash_str_exists(&ce->function_table, "__unserialize", sizeof("__unserialize") - 1))
-#endif
-				{
+				if (IGBINARY_HAS_UNSERIALIZE(ce)) {
 					ZEND_ASSERT(Z_TYPE_P(z) == IS_OBJECT);
 					struct igbinary_value_ref *ref = &IGB_REF_VAL_2(igsd, ref_n);
 					if ((flags & WANT_REF) != 0) {
