@@ -1900,6 +1900,60 @@ inline static int igbinary_serialize_object_enum_case(struct igbinary_serialize_
 }
 #endif
 /* }}} */
+#if PHP_VERSION_ID >= 80100
+/* {{{ igbinary_serialize_object_declared_properties */
+/**
+ * Serializes the declared properties of an object that has no properties table, without building one.
+ * Mirrors the optimization in php_var_serialize_intern(): the table would otherwise stay allocated for the lifetime of the object.
+ */
+static int igbinary_serialize_object_declared_properties(struct igbinary_serialize_data *igsd, zend_object *obj) {
+	zend_class_entry *ce = obj->ce;
+	uint32_t count = 0;
+	uint32_t remaining;
+	int i;
+
+	for (i = 0; i < ce->default_properties_count; i++) {
+		zend_property_info *prop_info = ce->properties_info_table[i];
+		if (prop_info != NULL && Z_TYPE_P(OBJ_PROP(obj, prop_info->offset)) != IS_UNDEF) {
+			count++;
+		}
+	}
+
+	if (count <= 0xff) {
+		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, igbinary_type_array8, (uint8_t)count));
+	} else if (count <= 0xffff) {
+		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_array16, (uint16_t)count));
+	} else {
+		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array32, count));
+	}
+
+	remaining = count;
+	for (i = 0; remaining > 0 && i < ce->default_properties_count; i++) {
+		zend_property_info *prop_info = ce->properties_info_table[i];
+		zval *prop;
+
+		if (prop_info == NULL) {
+			continue;
+		}
+		prop = OBJ_PROP(obj, prop_info->offset);
+		if (Z_TYPE_P(prop) == IS_UNDEF) {
+			continue;
+		}
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_string(igsd, prop_info->name));
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_zval(igsd, prop));
+		remaining--;
+	}
+
+	/* A hook may have unset properties of this object while its other properties were being serialized. */
+	/* Pad with nulls, which igbinary_unserialize() skips, to match the count written above. */
+	for (; remaining > 0; remaining--) {
+		RETURN_1_IF_NON_ZERO(igbinary_serialize_null(igsd));
+	}
+
+	return 0;
+}
+/* }}} */
+#endif
 /* {{{ igbinary_serialize_object_sleep */
 /** Serializes the class name and the properties named by __sleep(). Mirrors php_var_serialize_class() in ext/standard/var.c. */
 static int igbinary_serialize_object_sleep(struct igbinary_serialize_data *igsd, zval *z, zend_class_entry *ce, zend_function *sleep_fn) {
@@ -2022,6 +2076,18 @@ inline static int igbinary_serialize_object(struct igbinary_serialize_data *igsd
 	if (UNEXPECTED(r != 0)) {
 		return 1;
 	}
+
+#if PHP_VERSION_ID >= 80100
+	if (Z_OBJ_P(z)->properties == NULL
+	 && Z_OBJ_HT_P(z)->get_properties_for == NULL
+	 && Z_OBJ_HT_P(z)->get_properties == zend_std_get_properties
+#if PHP_VERSION_ID >= 80400
+	 && !zend_object_is_lazy(Z_OBJ_P(z))
+#endif
+	) {
+		return igbinary_serialize_object_declared_properties(igsd, Z_OBJ_P(z));
+	}
+#endif
 
 	return igbinary_serialize_array(igsd, z, true, incomplete_class, false);
 }
