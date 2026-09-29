@@ -1,5 +1,5 @@
 --TEST--
-__serialize() mechanism (015): Uninitialized properties from __sleep should throw when serializing
+__serialize() mechanism (015): Uninitialized typed properties returned by __sleep are skipped when serializing
 --SKIPIF--
 <?php
 if (PHP_VERSION_ID < 70400) { echo "skip __serialize/__unserialize not supported in php < 7.4 for compatibility with igbinary_serialize()"; }
@@ -56,7 +56,7 @@ function try_serialize_invalid($o) {
         printf("Caught %s: %s\n", get_class($e), $e->getMessage());
     }
 }
-// These should throw whether or not the uninitialized property is nullable.
+// These are skipped whether or not the uninitialized property is nullable, like serialize() does.
 try_serialize_invalid(new OSI());
 try_serialize_invalid(new SimplePublic());
 try_serialize_invalid(new SimpleProtected());
@@ -72,10 +72,10 @@ $s->i = null;
 try_serialize_invalid($s);
 
 --EXPECT--
-Caught Error: Typed property OSI::$o must not be accessed before initialization (in __sleep)
-Caught Error: Typed property SimplePublic::$i must not be accessed before initialization (in __sleep)
-Caught Error: Typed property SimpleProtected::$i must not be accessed before initialization (in __sleep)
-Caught Error: Typed property SimplePrivate::$i must not be accessed before initialization (in __sleep)
+string(22) "0000000217034f53491400"
+string(40) "00000002170c53696d706c655075626c69631400"
+string(46) "00000002170f53696d706c6550726f7465637465641400"
+string(42) "00000002170d53696d706c65507269766174651400"
 string(48) "00000002170c53696d706c655075626c6963140111016900"
 string(62) "00000002170f53696d706c6550726f74656374656414011104002a00690600"
 string(80) "00000002170d53696d706c6550726976617465140111100053696d706c6550726976617465006900"

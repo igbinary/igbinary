@@ -101,6 +101,21 @@ static zend_always_inline size_t hash_si_ptr_size(struct hash_si_ptr *h) {
  */
 size_t hash_si_ptr_find_or_insert(struct hash_si_ptr *h, const uintptr_t key, uint32_t value);
 
+/**
+ * Returns the value associated with key, or SIZE_MAX if key does not exist.
+ * @param h Pointer to hash_si_ptr struct.
+ * @param key key to look up
+ */
+size_t hash_si_ptr_find(const struct hash_si_ptr *h, const uintptr_t key);
+
+/**
+ * Changes the value associated with a key that exists in the map.
+ * @param h Pointer to hash_si_ptr struct.
+ * @param key key to update
+ * @param value new value
+ */
+void hash_si_ptr_set(struct hash_si_ptr *h, const uintptr_t key, uint32_t value);
+
 /** Returns capacity of hash_si_ptr.
  * @param h Pointer to hash_si_ptr struct.
  * @return Capacity of hash_si_ptr.
