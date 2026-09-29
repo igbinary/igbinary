@@ -1,7 +1,7 @@
 --TEST--
 Test serializing wrong values in __sleep
 --SKIPIF--
-<?php if (!extension_loaded("igbinary")) print "skip"; ?>
+<?php if (PHP_VERSION_ID < 80100) { echo "skip requires php 8.1+\n"; } ?>
 --INI--
 error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
@@ -23,17 +23,6 @@ var_dump($unser);
 
 ?>
 --EXPECTF--
-Notice: igbinary_serialize(): "name0" returned as member variable from __sleep() but does not exist in %s on line 12
-
-Notice: igbinary_serialize(): "name1" returned as member variable from __sleep() but does not exist in %s on line 12
-
-Notice: igbinary_serialize(): "name2" returned as member variable from __sleep() but does not exist in %s on line 12
-\x00\x00\x00\x02\x17\x01X\x14\x03\x11\x05name0\x00\x11\x05name1\x00\x11\x05name2\x00
-object(X)#2 (3) {
-  ["name0"]=>
-  NULL
-  ["name1"]=>
-  NULL
-  ["name2"]=>
-  NULL
-}
+Warning: igbinary_serialize(): X::__sleep() should return an array only containing the names of instance-variables to serialize in %s on line 12
+\x00\x00\x00\x02\x00
+NULL
