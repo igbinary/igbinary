@@ -30,7 +30,7 @@ try {
     printf("%s: %s\n", $e::class, $e->getMessage());
 }
 --EXPECT--
-%00%00%00%02%17%01C%14%01%00
+%00%00%00%02%17%01C%14%00
 object(C)#2 (0) {
   ["a"]=>
   uninitialized(int)

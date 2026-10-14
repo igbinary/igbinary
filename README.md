@@ -29,6 +29,7 @@ Features
 - `__autoload` & `unserialize_callback_func`
 - `__sleep` & `__wakeup`
 - `__serialize` & `__unserialize` (only used in php 7.4+)
+- The `allowed_classes` and `max_depth` options of `unserialize()`
 - Serializable -interface
 - Data portability between platforms (32/64bit, endianness)
 - Tested on Linux amd64, Linux ARM, Mac OSX x86, HP-UX PA-RISC and NetBSD sparc64

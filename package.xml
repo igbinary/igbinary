@@ -125,6 +125,7 @@ memcached or similar memory based storages for serialized data.</description>
     <file name="igbinary_016.phpt" role="test" />
     <file name="igbinary_017.phpt" role="test" />
     <file name="igbinary_018.phpt" role="test" />
+    <file name="igbinary_018_php7.phpt" role="test" />
     <file name="igbinary_019.phpt" role="test" />
     <file name="igbinary_020.phpt" role="test" />
     <file name="igbinary_021.phpt" role="test" />
@@ -179,6 +180,7 @@ memcached or similar memory based storages for serialized data.</description>
     <file name="igbinary_063_php72.phpt" role="test" />
     <file name="igbinary_064.phpt" role="test" />
     <file name="igbinary_065.phpt" role="test" />
+    <file name="igbinary_065_php7.phpt" role="test" />
     <file name="igbinary_066.phpt" role="test" />
     <file name="igbinary_067.phpt" role="test" />
     <file name="igbinary_068.phpt" role="test" />
@@ -205,6 +207,8 @@ memcached or similar memory based storages for serialized data.</description>
     <file name="igbinary_086.phpt" role="test" />
     <file name="igbinary_087.phpt" role="test" />
     <file name="igbinary_088.phpt" role="test" />
+    <file name="igbinary_088_php7.phpt" role="test" />
+    <file name="igbinary_088_php80.phpt" role="test" />
     <file name="igbinary_089.phpt" role="test" />
     <file name="igbinary_089_32bit.phpt" role="test" />
     <file name="igbinary_090.phpt" role="test" />
@@ -219,20 +223,32 @@ memcached or similar memory based storages for serialized data.</description>
     <file name="igbinary_099.phpt" role="test" />
     <file name="igbinary_100.phpt" role="test" />
     <file name="igbinary_101.phpt" role="test" />
+    <file name="igbinary_102.phpt" role="test" />
     <file name="igbinary_bug54662.phpt" role="test" />
     <file name="igbinary_bug72134.phpt" role="test" />
     <file name="igbinary_enums_1.phpt" role="test" />
     <file name="igbinary_enums_2.phpt" role="test" />
     <file name="igbinary_enums_3.phpt" role="test" />
     <file name="igbinary_enums_3_php83.phpt" role="test" />
+    <file name="igbinary_serialize_deep_nesting.phpt" role="test" />
+    <file name="igbinary_unserialize_max_depth.phpt" role="test" />
+    <file name="igbinary_unserialize_max_depth_boundary.phpt" role="test" />
+    <file name="igbinary_unserialize_options.phpt" role="test" />
     <file name="igbinary_unserialize_v1_compatible.phpt" role="test" />
     <file name="php82_suppress_dynamic_properties_warning.inc" role="test" />
+    <file name="serialize_array_ref_reentrancy.phpt" role="test" />
+    <file name="serialize_declared_properties.phpt" role="test" />
+    <file name="serialize_object_as_null.phpt" role="test" />
     <file name="sleep_mangled_name_clash.phpt" role="test" />
     <file name="typed_property_ref_assignment_failure.phpt" role="test" />
     <file name="typed_property_ref_overwrite.phpt" role="test" />
     <file name="typed_property_ref_overwrite2.phpt" role="test" />
     <file name="typed_property_refs.phpt" role="test" />
     <file name="typed_property_refs_php74.phpt" role="test" />
+    <file name="unserialize_class_name_checks.phpt" role="test" />
+    <file name="unserialize_failure_cleanup.phpt" role="test" />
+    <file name="unserialize_readonly_default.phpt" role="test" />
+    <file name="unserialize_serializable_format.phpt" role="test" />
    </dir>
   </dir>
  </contents>

@@ -1,5 +1,7 @@
 --TEST--
 Don't emit zval has unknown type 0 (IS_UNDEF)
+--SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) { echo "skip requires php 8.0+\n"; } ?>
 --INI--
 error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
@@ -26,19 +28,18 @@ class MyClass {
     }
 }
 error_reporting(E_ALL);
-// TODO: emit 'Notice: igbinary_serialize(): "x" returned as member variable from __sleep() but does not exist' instead.
 $serialized = igbinary_serialize(new MyClass());
 echo bin2hex($serialized) . "\n";
 var_export_normalized(igbinary_unserialize($serialized));
 echo "\n";
 ?>
 --EXPECTF--
-Notice: igbinary_serialize(): "x" returned as member variable from __sleep() but does not exist in %s on line 25
+Warning: igbinary_serialize(): "x" returned as member variable from __sleep() but does not exist in %s on line 24
 
-Notice: igbinary_serialize(): "y" returned as member variable from __sleep() but does not exist in %s on line 25
+Warning: igbinary_serialize(): "y" returned as member variable from __sleep() but does not exist in %s on line 24
 
-Notice: igbinary_serialize(): "z" returned as member variable from __sleep() but does not exist in %s on line 25
-0000000217074d79436c617373140611046b6570740602110178001104002a007900110a004d79436c617373007a001106002a00736574110673657456616c110d004d79436c617373007072697600
+Warning: igbinary_serialize(): "z" returned as member variable from __sleep() but does not exist in %s on line 24
+0000000217074d79436c617373140311046b65707406021106002a00736574110673657456616c110d004d79436c617373007072697600
 MyClass::__set_state(array(
    'kept' => 2,
    'x' => NULL,
