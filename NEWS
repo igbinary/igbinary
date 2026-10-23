@@ -1,3 +1,9 @@
+Unreleased
+=======
+* Speed up igbinary_unserialize() of arrays on PHP 8.1+ by inserting elements with a single hash table probe
+  (zend_hash_lookup()/zend_hash_index_lookup()) instead of a find followed by an insert.
+* Add a benchmark for unserializing arrays of associative arrays.
+
 3.2.17RC1 2025-11-26
 =======
 * Support PHP 8.5
