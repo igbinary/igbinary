@@ -111,6 +111,11 @@ static zend_always_inline void zval_ptr_dtor_str(zval *zval_ptr)
     return 1;                     \
   }
 
+#define FAIL_IF_NON_ZERO(cmd) \
+  if (UNEXPECTED((cmd) != 0)) {   \
+    goto fail;                    \
+  }
+
 #ifdef ZEND_ACC_NOT_SERIALIZABLE
 # define IGBINARY_IS_NOT_SERIALIZABLE(ce) UNEXPECTED((ce)->ce_flags & (ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_ANON_CLASS))
 # define IGBINARY_IS_NOT_UNSERIALIZABLE(ce) IGBINARY_IS_NOT_SERIALIZABLE(ce)
@@ -762,7 +767,7 @@ cleanup:
 	return return_code;
 }
 /* }}} */
-/* {{{ int igbinary_unserialize(const uint8_t *, size_t, zval **) */
+/* {{{ int igbinary_unserialize(const uint8_t *, size_t, zval *) */
 /**
  * Unserializes the data into z
  * @param buf the read-only buffer with the serialized data
@@ -774,7 +779,9 @@ IGBINARY_API int igbinary_unserialize(const uint8_t *buf, size_t buf_len, zval *
 	struct igbinary_unserialize_data igsd;
 	int ret = 0;
 
-	igbinary_unserialize_data_init(&igsd);
+	if (UNEXPECTED(igbinary_unserialize_data_init(&igsd) != 0)) {
+		return 1;
+	}
 
 	igsd.buffer = buf;
 	igsd.buffer_ptr = buf;
@@ -918,39 +925,18 @@ PS_SERIALIZER_DECODE_FUNC(igbinary) {
 	zval z;
 	zval *d;
 	zend_string *key;
-	int ret = 0;
-
-	struct igbinary_unserialize_data igsd;
 
 	if (!val || vallen == 0) {
 		return SUCCESS;
 	}
 
-	if (igbinary_unserialize_data_init(&igsd) != 0) {
-		return FAILURE;
-	}
-
-	igsd.buffer = (const uint8_t *)val;
-	igsd.buffer_ptr = igsd.buffer;
-	igsd.buffer_end = igsd.buffer + vallen;
-
-	if (UNEXPECTED(igbinary_unserialize_header(&igsd))) {
-		ret = 1;
-		goto deinit;
-	}
-
 	/** The serializer serialized the session variables as an array. So, we unserialize that array. */
 	/** We then iterate over the array to set the individual session variables (managing the reference counts), then free the original array. */
-	if (UNEXPECTED(igbinary_unserialize_zval(&igsd, &z, WANT_CLEAR))) {
-		ret = 1;
-		goto deinit;
-	}
-
-	ret = igbinary_finish_deferred_calls(&igsd);
-
-deinit:
-	igbinary_unserialize_data_deinit(&igsd);
-	if (UNEXPECTED(ret)) {
+	/* Like igbinary_unserialize(), this rejects trailing data after the array. */
+	ZVAL_UNDEF(&z);
+	if (UNEXPECTED(igbinary_unserialize((const uint8_t *)val, vallen, &z))) {
+		/* Release whatever was partially unserialized before the failure. */
+		zval_ptr_dtor(&z);
 		return FAILURE;
 	}
 
@@ -1440,7 +1426,7 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	}
 
 	if (n <= 0xff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, igbinary_type_array8, (uint8_t)n));
+		FAIL_IF_NON_ZERO(igbinary_serialize8_and_8(igsd, igbinary_type_array8, (uint8_t)n));
 
 		if (n == 0) {
 			if (object) {
@@ -1449,9 +1435,9 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 			return 0;
 		}
 	} else if (n <= 0xffff) {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_array16, (uint16_t)n));
+		FAIL_IF_NON_ZERO(igbinary_serialize8_and_16(igsd, igbinary_type_array16, (uint16_t)n));
 	} else {
-		RETURN_1_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array32, n));
+		FAIL_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array32, n));
 	}
 
 	/* serialize properties. */
@@ -1470,27 +1456,33 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 			/* This is an undefined declared typed property of an object. */
 			/* This can't be a value or a reference in an array - except maybe for $GLOBALS, which has other issues. */
 			ZEND_ASSERT(!serialize_props);
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_null(igsd));
+			FAIL_IF_NON_ZERO(igbinary_serialize_null(igsd));
 			continue;
 		}
 
 		if (key == NULL) {
 			/* Key is numeric */
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_long(igsd, key_index));
+			FAIL_IF_NON_ZERO(igbinary_serialize_long(igsd, key_index));
 		} else {
 			/* Key is string */
-			RETURN_1_IF_NON_ZERO(igbinary_serialize_string(igsd, key));
+			FAIL_IF_NON_ZERO(igbinary_serialize_string(igsd, key));
 		}
 
 		/* we should still add element even if it's not OK,
 		 * since we already wrote the length of the array before */
-		RETURN_1_IF_NON_ZERO(igbinary_serialize_zval(igsd, d));
+		FAIL_IF_NON_ZERO(igbinary_serialize_zval(igsd, d));
 	} ZEND_HASH_FOREACH_END();
 	if (object) {
 		zend_release_properties(h);
 	}
 
 	return 0;
+fail:
+	if (object) {
+		zend_release_properties(h);
+	}
+
+	return 1;
 }
 /* }}} */
 /* {{{ igbinary_serialize_array_ref */
@@ -2635,7 +2627,7 @@ zend_always_inline static int igbinary_unserialize_array(struct igbinary_unseria
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
 			zend_error(E_WARNING, "igbinary_unserialize_array: end-of-data");
 cleanup:
-			zval_ptr_dtor_nogc(z);
+			zval_ptr_dtor(z);
 			ZVAL_NULL(z);
 			return 1;
 		}
@@ -2702,18 +2694,9 @@ cleanup:
 		/* Use NULL because inserting UNDEF into array does not add a new element */
 		if (key_str != NULL) {
 			vp = igbinary_zend_hash_add_or_find(h, key_str);
-			/* If there was an old value instead of an inserted IS_NULL zval (unlikely) and that old value was refcounted, then add a reference and defer freeing that reference */
-			if (UNEXPECTED(igsd_addref_and_defer_dtor(&igsd->deferred_dtor_tracker, vp))) {
-				return 1;
-			}
-
 			zend_string_release(key_str);
 		} else {
-			/* If there was an old value instead of an inserted IS_NULL zval (unlikely) and that old value was refcounted, then add a reference and defer freeing that reference */
 			vp = igbinary_zend_hash_index_add_or_find(h, key_index);
-			if (UNEXPECTED(igsd_addref_and_defer_dtor(&igsd->deferred_dtor_tracker, vp))) {
-				return 1;
-			}
 		}
 
 		ZEND_ASSERT(vp != NULL);
@@ -2721,6 +2704,15 @@ cleanup:
 			/* TODO: In php 8.1+, IS_INDIRECT checks and macros may become unnecessary
 			 * due to $GLOBALS being converted to a regular array in https://wiki.php.net/rfc/restrict_globals_usage */
 			vp = Z_INDIRECT_P(vp);
+		}
+
+		/* If there was an old value instead of an inserted IS_NULL zval (unlikely) and that old value was refcounted, then add a reference and defer freeing that reference */
+		if (UNEXPECTED(Z_REFCOUNTED_P(vp))) {
+			if (UNEXPECTED(igsd_defer_dtor(&igsd->deferred_dtor_tracker, vp))) {
+				return 1;
+			}
+
+			ZVAL_NULL(vp);
 		}
 
 		ZEND_ASSERT(vp != NULL);
@@ -2793,7 +2785,7 @@ inline static int igbinary_unserialize_object_properties(struct igbinary_unseria
 
 		if (IGB_NEEDS_MORE_DATA(igsd, 1)) {
 			zend_error(E_WARNING, "igbinary_unserialize_object_properties: end-of-data");
-			zval_ptr_dtor_nogc(z);
+			zval_ptr_dtor(z);
 			ZVAL_NULL(z);
 			return 1;
 		}
@@ -3143,7 +3135,7 @@ static int igbinary_unserialize_object_enum_case(struct igbinary_unserialize_dat
  * @see ext/standard/var_unserializer.c in the php-src repo. Parts of this code are based on that.
  */
 zend_always_inline static int igbinary_unserialize_object(struct igbinary_unserialize_data *igsd, enum igbinary_type t, zval *z, int flags) {
-	zend_class_entry *ce;
+	zend_class_entry *ce = NULL;
 
 	size_t ref_n;
 
@@ -3292,7 +3284,10 @@ zend_always_inline static int igbinary_unserialize_object(struct igbinary_unseri
 					/* Unserialize the array as an array for a deferred call to __unserialize */
 					zval param;
 					int result;
+
+					ZVAL_EMPTY_ARRAY(&param);
 					zend_string_release(class_name);
+
 					result = igbinary_unserialize_array(igsd, t, &param, 0, false);
 					ZVAL_DEREF(z);
 					ZEND_ASSERT(Z_TYPE_P(z) == IS_OBJECT);
