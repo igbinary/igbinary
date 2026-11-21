@@ -53,6 +53,15 @@ class S implements SessionHandlerInterface {
     public function gc($time): int {
         return 0;
     }
+
+    // 9.0+ required
+    public function create_sid(): string {
+        return 'sess-sid-47';
+    }
+
+    public function validateId($sessionId): bool {
+        return true;
+    }
 }
 
 class Foo {

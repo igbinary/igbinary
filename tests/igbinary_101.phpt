@@ -28,7 +28,7 @@ igbinary_unserialize($serialized_igb);
 ?>
 --EXPECTF--
 PHP behavior:
-Warning: unserialize(): Cannot unserialize value for virtual property Test::$ in %s on line %d
+Warning: unserialize(): Cannot unserialize value for virtual property Test::$%S in %s on line %d
 
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 

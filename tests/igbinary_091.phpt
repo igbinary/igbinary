@@ -25,5 +25,5 @@ check_serialize_throws(new class () implements Serializable {
 });
 ?>
 --EXPECTF--
-Caught: Serialization of 'class@anonymous' is not allowed
-Caught: Serialization of '%s@anonymous' is not allowed
+Caught: Serialization of 'class@anonymous%S' is not allowed
+Caught: Serialization of '%s@anonymous%S' is not allowed
