@@ -398,13 +398,15 @@ ZEND_GET_MODULE(igbinary)
 
 /* {{{ INI entries */
 PHP_INI_BEGIN()
-	STD_PHP_INI_BOOLEAN("igbinary.compact_strings", "1", PHP_INI_ALL, OnUpdateBool, compact_strings, zend_igbinary_globals, igbinary_globals)
+	STD_PHP_INI_BOOLEAN("igbinary.compact_strings",       "1",    PHP_INI_ALL, OnUpdateBool, compact_strings,       zend_igbinary_globals, igbinary_globals)
+	STD_PHP_INI_ENTRY  ("igbinary.unserialize_max_depth", "4096", PHP_INI_ALL, OnUpdateLong, unserialize_max_depth, zend_igbinary_globals, igbinary_globals)
 PHP_INI_END()
 /* }}} */
 
 /* {{{ php_igbinary_init_globals */
 static void php_igbinary_init_globals(zend_igbinary_globals *igbinary_globals) {
 	igbinary_globals->compact_strings = 1;
+	igbinary_globals->unserialize_max_depth = 4096;
 }
 /* }}} */
 
@@ -2064,13 +2066,7 @@ inline static int igbinary_unserialize_data_init(struct igbinary_unserialize_dat
 	/* Initialize the recursion guard fields before any path that can fail, */
 	/* so callers that ignore the return value still see defined values. */
 	igsd->cur_depth = 0;
-#if PHP_VERSION_ID >= 70400
-	igsd->max_depth = zend_ini_long((char *)"unserialize_max_depth", sizeof("unserialize_max_depth") - 1, 0);
-#else
-	/* unserialize_max_depth ini was added in PHP 7.4. */
-	/* Use the same default cap to keep the recursion guard active on older builds. */
-	igsd->max_depth = 4096;
-#endif
+	igsd->max_depth = IGBINARY_G(unserialize_max_depth);
 	references = emalloc(sizeof(igsd->references[0]) * 4);
 	if (UNEXPECTED(references == NULL)) {
 		return 1;

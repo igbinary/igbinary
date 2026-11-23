@@ -1,6 +1,11 @@
+*~
+*.tmp
 *.swp
 *.lo
 *.la
+*.gcda
+*.gcno
+*.info
 *.tgz
 *.dep
 .deps
