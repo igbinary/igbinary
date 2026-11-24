@@ -26,7 +26,20 @@
 
 /* See https://nikic.github.io/2014/12/22/PHPs-new-hashtable-implementation.html for an overview of PHP's hash table information */
 
-#if PHP_VERSION_ID < 70200 || PHP_VERSION_ID >= 80100 || IGBINARY_FORCE_REFERENCE_HASH_TABLE_FUNCTIONS
+#if PHP_VERSION_ID >= 80100 && !IGBINARY_FORCE_REFERENCE_HASH_TABLE_FUNCTIONS
+/* PHP 8.1+ exports zend_hash_lookup()/zend_hash_index_lookup(), which have exactly the semantics needed here */
+/* (return the existing value, or insert and return a new IS_NULL entry) using a single hash table probe. */
+/* {{{ igbinary_zend_hash_add_or_find(HashTable *ht, zend_string *key) */
+static zend_always_inline zval *igbinary_zend_hash_add_or_find(HashTable *ht, zend_string *key) {
+	return zend_hash_lookup(ht, key);
+}
+/* }}} */
+/* {{{ igbinary_zend_hash_index_add_or_find(HashTable *ht, zend_long key) */
+static zend_always_inline zval *igbinary_zend_hash_index_add_or_find(HashTable *ht, zend_long key) {
+	return zend_hash_index_lookup(ht, key);
+}
+/* }}} */
+#elif PHP_VERSION_ID < 70200 || PHP_VERSION_ID >= 80100 || IGBINARY_FORCE_REFERENCE_HASH_TABLE_FUNCTIONS
 /* {{{ igbinary_zend_hash_add_or_find(HashTable *ht, zend_string *key) unoptimized reference implementation. */
 /* This will either return the pointer to the existing value, or add a brand new entry to the hash table with a PHP IS_NULL value. */
 static zend_always_inline zval *igbinary_zend_hash_add_or_find(HashTable *ht, zend_string *key) {
