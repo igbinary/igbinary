@@ -24,20 +24,20 @@ session.cache_limiter=
 --FILE--
 <?php
 class NullHandler implements SessionHandlerInterface {
-    public function open(string $path, string $name): bool { return true; }
+    public function open($path, $name): bool { return true; }
     public function close(): bool { return true; }
-    public function read(string $id): string|false { return ''; }
-    public function write(string $id, string $data): bool { return true; }
-    public function destroy(string $id): bool { return true; }
-    public function gc(int $max_lifetime): int|false { return 0; }
-    public function create_sid(): string { return 'a'; }
-    public function validateId(string $sid) { return true; }
+    public function read($id): string { return ''; }
+    public function write($id, $data):bool { return true; }
+    public function destroy($id): bool { return true; }
+    public function gc($max_lifetime): int { return 0; }
+    public function create_sid() { return 'a'; }
+    public function validateId($sid) { return true; }
 }
 
 session_set_save_handler(new NullHandler(), false);
 
-function decode(string $data): void {
-    session_id('igbinaryclaudetest');
+function decode(string $data) {
+    session_id('igbinarysessionidtest');
     var_dump(session_start());
     var_dump(session_decode($data));
     var_dump($_SESSION);
