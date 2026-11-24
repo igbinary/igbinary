@@ -56,6 +56,8 @@ jobs:
            PHP_VERSION_FULL: 8.4.20
          - PHP_VERSION: '8.5'
            PHP_VERSION_FULL: 8.5.5
+         - PHP_VERSION: '8.6'
+           PHP_VERSION_FULL: 8.6.0
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -73,7 +75,7 @@ jobs:
   windows:
     strategy:
       matrix:
-        php-version: ["7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+        php-version: ["7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5", "8.6"]
         arch: [x64, x86]
         ts: [nts, ts]
     runs-on: windows-2022
