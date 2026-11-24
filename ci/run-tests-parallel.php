@@ -1381,6 +1381,14 @@ function run_all_tests_parallel(array $test_files, array $env, $redir_tested)
 {
     global $workers, $test_idx, $test_cnt, $test_results, $failed_tests_file, $result_tests_file, $PHP_FAILED_TESTS, $shuffle, $SHOW_ONLY_GROUPS, $valgrind;
 
+    $listenSock = @stream_socket_server("tcp://127.0.0.1:0");
+    if ($listenSock === false) {
+        echo "Couldn't create socket on localhost; running tests sequentially.\n";
+        $workers = null;
+        run_all_tests($test_files, $env, $redir_tested);
+        return;
+    }
+
     // The PHP binary running run-tests.php, and run-tests.php itself
     // This PHP executable is *not* necessarily the same as the tested version
     $thisPHP = PHP_BINARY;
@@ -1444,7 +1452,6 @@ function run_all_tests_parallel(array $test_files, array $env, $redir_tested)
 
     // We use sockets rather than STDIN/STDOUT for comms because on Windows,
     // those can't be non-blocking for some reason.
-    $listenSock = stream_socket_server("tcp://127.0.0.1:0") or error("Couldn't create socket on localhost.");
     $sockName = stream_socket_get_name($listenSock, false);
     // PHP is terrible and returns IPv6 addresses not enclosed by []
     $portPos = strrpos($sockName, ":");
