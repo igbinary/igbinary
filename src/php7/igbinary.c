@@ -44,6 +44,7 @@
 #if PHP_VERSION_ID < 70300
 #define zend_string_efree(s) zend_string_release((s))
 #define GC_ADDREF(p) (++GC_REFCOUNT((p)))
+#define GC_DELREF(p) (--GC_REFCOUNT((p)))
 #endif
 
 #if defined(HAVE_APCU_SUPPORT)
@@ -1396,6 +1397,7 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	uint32_t n;
 	zval *d;
 	zval *z_original;
+	HashTable *h_held = NULL;
 
 	zend_string *key;
 	zend_long key_index;
@@ -1442,6 +1444,14 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 		FAIL_IF_NON_ZERO(igbinary_serialize8_and_32(igsd, igbinary_type_array32, n));
 	}
 
+	/* Hold a reference to the array while walking it, like serialize() does:
+	 * a hook (__serialize, __sleep, Serializable::serialize) that appends to it
+	 * through a PHP reference must separate it instead of reallocating it in place. */
+	if (!object && Z_REFCOUNTED_P(z)) {
+		h_held = h;
+		GC_ADDREF(h_held);
+	}
+
 	/* serialize properties. */
 	ZEND_HASH_FOREACH_KEY_VAL(h, key_index, key, d) {
 		/* skip magic member in incomplete classes */
@@ -1476,12 +1486,16 @@ inline static int igbinary_serialize_array(struct igbinary_serialize_data *igsd,
 	} ZEND_HASH_FOREACH_END();
 	if (object) {
 		zend_release_properties(h);
+	} else if (h_held != NULL && GC_DELREF(h_held) == 0) {
+		zend_array_destroy(h_held);
 	}
 
 	return 0;
 fail:
 	if (object) {
 		zend_release_properties(h);
+	} else if (h_held != NULL && GC_DELREF(h_held) == 0) {
+		zend_array_destroy(h_held);
 	}
 
 	return 1;
