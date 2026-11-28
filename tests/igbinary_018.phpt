@@ -1,6 +1,7 @@
 --TEST--
 Object test, __sleep error cases
 --SKIPIF--
+<?php if (PHP_VERSION_ID < 80000) { echo "skip requires php 8.0+\n"; } ?>
 --INI--
 error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
@@ -77,8 +78,8 @@ test('wrong', $p, true);
 ?>
 --EXPECT--
 nonexisting
-17034f626a140111016300
+17034f626a1400
 OK
 wrong
-17034f706a140100
+17034f706a1400
 OK

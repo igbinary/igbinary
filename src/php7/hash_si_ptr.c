@@ -162,6 +162,42 @@ size_t hash_si_ptr_find_or_insert(struct hash_si_ptr *h, const uintptr_t key, ui
 	}
 }
 /* }}} */
+/* {{{ hash_si_ptr_find */
+/**
+ * @param h the pointer to the hash map.
+ * @param key the key to look up
+ * @return the value, or SIZE_MAX if the key does not exist.
+ */
+size_t hash_si_ptr_find(const struct hash_si_ptr *h, const uintptr_t key) {
+	size_t mask = h->size - 1;
+	uint32_t hv = inline_hash_of_address(key) & mask;
+
+	while (h->data[hv].key != HASH_PTR_KEY_INVALID) {
+		if (h->data[hv].key == key) {
+			return h->data[hv].value;
+		}
+		hv = (hv + 1) & mask;
+	}
+	return SIZE_MAX;
+}
+/* }}} */
+/* {{{ hash_si_ptr_set */
+/**
+ * @param h the pointer to the hash map.
+ * @param key a key that exists in the map
+ * @param value the new value to associate with key
+ */
+void hash_si_ptr_set(struct hash_si_ptr *h, const uintptr_t key, uint32_t value) {
+	size_t mask = h->size - 1;
+	uint32_t hv = inline_hash_of_address(key) & mask;
+
+	while (h->data[hv].key != key) {
+		ZEND_ASSERT(h->data[hv].key != HASH_PTR_KEY_INVALID);
+		hv = (hv + 1) & mask;
+	}
+	h->data[hv].value = value;
+}
+/* }}} */
 
 /*
  * Local variables:
